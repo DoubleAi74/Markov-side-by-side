@@ -13,6 +13,14 @@ body {
     sans-serif;
 }
 
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
 .code-input {
   font-family: "Courier New", Courier, monospace;
 }

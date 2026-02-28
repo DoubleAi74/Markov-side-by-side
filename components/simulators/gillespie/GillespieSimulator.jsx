@@ -1,17 +1,11 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import {
-  faDna,
-  faSlidersH,
-  faExchangeAlt,
-  faPlus,
-  faTimes,
-} from "@fortawesome/free-solid-svg-icons";
+import { useCallback, useMemo, useState } from "react";
 import SimChart from "../shared/SimChart";
+import ExpressionListSection from "../shared/ExpressionListSection";
 import { Transition, Gillespie } from "./engine";
 import { compileExpression } from "@/lib/compile";
+import { assignmentsToText, parseNameValueLines } from "@/lib/modelParsers";
 
 const COLORS = [
   "#10b981",
@@ -21,6 +15,12 @@ const COLORS = [
   "#8b5cf6",
   "#ec4899",
   "#6366f1",
+];
+
+const TAB_ITEMS = [
+  { id: "vars", label: "Variables" },
+  { id: "params", label: "Parameters" },
+  { id: "transitions", label: "Transitions" },
 ];
 
 function hexToRgba(hex, alpha) {
@@ -46,36 +46,64 @@ const FOOD_CHAIN_PRESET = {
     { name: "c_death", val: 0.8 },
   ],
   transitions: [
-    { rate: "p_growth * (1 - Plants/K)", change: "1, 0, 0" },
-    { rate: "p_decay * Plants", change: "-1, 0, 0" },
-    { rate: "h_eat * Plants * Herbivores", change: "-1, 1, 0" },
-    { rate: "h_death * Herbivores", change: "0, -1, 0" },
-    { rate: "c_eat * Herbivores * Carnivores", change: "0, -1, 1" },
-    { rate: "c_death * Carnivores", change: "0, 0, -1" },
+    { rate: "p_growth * (1 - Plants/K)", deltas: [1, 0, 0] },
+    { rate: "p_decay * Plants", deltas: [-1, 0, 0] },
+    {
+      rate: "h_eat * Plants * Herbivores",
+      deltas: [-1, 1, 0],
+    },
+    { rate: "h_death * Herbivores", deltas: [0, -1, 0] },
+    {
+      rate: "c_eat * Herbivores * Carnivores",
+      deltas: [0, -1, 1],
+    },
+    { rate: "c_death * Carnivores", deltas: [0, 0, -1] },
   ],
   tMax: 5,
 };
 
-const TABS = [
-  { id: "vars", label: "Variables", icon: faDna },
-  { id: "params", label: "Parameters", icon: faSlidersH },
-  { id: "transitions", label: "Transitions", icon: faExchangeAlt },
-];
-
 function makeId() {
   return Math.random().toString(36).slice(2);
 }
-function withId(arr) {
-  return arr.map((item) => ({ ...item, id: makeId() }));
+
+function withTransitionIds(transitions, varCount) {
+  return transitions.map((transition) => ({
+    id: makeId(),
+    rate: transition.rate,
+    deltas: Array.from({ length: varCount }, (_, idx) =>
+      String(transition.deltas?.[idx] ?? 0),
+    ),
+  }));
+}
+
+function textToRows(text) {
+  const lines = String(text).split(/\r?\n/);
+  const normalized = lines.length ? lines : [""];
+  return normalized.map((line) => ({ id: makeId(), text: line }));
+}
+
+function rowsToText(rows) {
+  return rows.map((row) => row.text).join("\n");
+}
+
+function insertAfterRow(rows, afterId, newRow) {
+  const idx = rows.findIndex((row) => row.id === afterId);
+  if (idx < 0) return [...rows, newRow];
+  return [...rows.slice(0, idx + 1), newRow, ...rows.slice(idx + 1)];
 }
 
 export default function GillespieSimulator() {
   const [activeTab, setActiveTab] = useState("vars");
-  const [vars, setVars] = useState(withId(FOOD_CHAIN_PRESET.vars));
-  const [params, setParams] = useState(withId(FOOD_CHAIN_PRESET.params));
-  const [transitions, setTransitions] = useState(
-    withId(FOOD_CHAIN_PRESET.transitions),
+  const [varRows, setVarRows] = useState(() =>
+    textToRows(assignmentsToText(FOOD_CHAIN_PRESET.vars)),
   );
+  const [paramRows, setParamRows] = useState(() =>
+    textToRows(assignmentsToText(FOOD_CHAIN_PRESET.params)),
+  );
+  const [transitions, setTransitions] = useState(() =>
+    withTransitionIds(FOOD_CHAIN_PRESET.transitions, FOOD_CHAIN_PRESET.vars.length),
+  );
+
   const [tMax, setTMax] = useState(FOOD_CHAIN_PRESET.tMax);
   const [numSims, setNumSims] = useState(1);
   const [running, setRunning] = useState(false);
@@ -84,100 +112,184 @@ export default function GillespieSimulator() {
   const [chartDatasets, setChartDatasets] = useState([]);
   const [chartXMax, setChartXMax] = useState(undefined);
 
-  const addVar = () =>
-    setVars((p) => [...p, { id: makeId(), name: "", val: 0 }]);
-  const removeVar = (id) => setVars((p) => p.filter((v) => v.id !== id));
-  const updateVar = (id, field, value) =>
-    setVars((p) => p.map((v) => (v.id === id ? { ...v, [field]: value } : v)));
+  const varsText = useMemo(() => rowsToText(varRows), [varRows]);
+  const paramsText = useMemo(() => rowsToText(paramRows), [paramRows]);
 
-  const addParam = () =>
-    setParams((p) => [...p, { id: makeId(), name: "", val: 0 }]);
-  const removeParam = (id) => setParams((p) => p.filter((v) => v.id !== id));
-  const updateParam = (id, field, value) =>
-    setParams((p) =>
-      p.map((v) => (v.id === id ? { ...v, [field]: value } : v)),
-    );
+  const variableNamesPreview = useMemo(() => {
+    try {
+      return parseNameValueLines(varsText, "Variable").map((v) => v.name);
+    } catch {
+      return [];
+    }
+  }, [varsText]);
 
-  const addTrans = () =>
-    setTransitions((p) => [...p, { id: makeId(), rate: "", change: "" }]);
-  const removeTrans = (id) =>
-    setTransitions((p) => p.filter((v) => v.id !== id));
-  const updateTrans = (id, field, value) =>
-    setTransitions((p) =>
-      p.map((v) => (v.id === id ? { ...v, [field]: value } : v)),
+  const updateRow = (setter) => (id, text) => {
+    setter((rows) => rows.map((row) => (row.id === id ? { ...row, text } : row)));
+  };
+
+  const insertRow = (setter) => (afterId) => {
+    const id = makeId();
+    setter((rows) => insertAfterRow(rows, afterId, { id, text: "" }));
+    return id;
+  };
+
+  const removeRow = (setter) => (id) => {
+    setter((rows) => rows.filter((row) => row.id !== id));
+  };
+
+  const updateTransition = (id, field, value) => {
+    setTransitions((items) =>
+      items.map((item) => (item.id === id ? { ...item, [field]: value } : item)),
     );
+  };
+
+  const addTransition = () => {
+    setTransitions((items) => [
+      ...items,
+      {
+        id: makeId(),
+        rate: "",
+        deltas: Array.from({ length: variableNamesPreview.length }, () => "0"),
+      },
+    ]);
+  };
+
+  const removeTransition = (id) => {
+    setTransitions((items) => {
+      const next = items.filter((item) => item.id !== id);
+      if (next.length > 0) return next;
+      return [
+        {
+          id: makeId(),
+          rate: "",
+          deltas: Array.from({ length: variableNamesPreview.length }, () => "0"),
+        },
+      ];
+    });
+  };
+
+  const updateTransitionDelta = (id, idx, value) => {
+    setTransitions((items) =>
+      items.map((item) => {
+        if (item.id !== id) return item;
+        const nextDeltas = [...item.deltas];
+        while (nextDeltas.length <= idx) {
+          nextDeltas.push("0");
+        }
+        nextDeltas[idx] = value;
+        return { ...item, deltas: nextDeltas };
+      }),
+    );
+  };
 
   const loadPreset = () => {
-    setVars(withId(FOOD_CHAIN_PRESET.vars));
-    setParams(withId(FOOD_CHAIN_PRESET.params));
-    setTransitions(withId(FOOD_CHAIN_PRESET.transitions));
+    setVarRows(textToRows(assignmentsToText(FOOD_CHAIN_PRESET.vars)));
+    setParamRows(textToRows(assignmentsToText(FOOD_CHAIN_PRESET.params)));
+    setTransitions(
+      withTransitionIds(FOOD_CHAIN_PRESET.transitions, FOOD_CHAIN_PRESET.vars.length),
+    );
     setTMax(FOOD_CHAIN_PRESET.tMax);
     setError("");
     setStats("");
     setChartDatasets([]);
+    setChartXMax(undefined);
   };
 
   const runSimulation = useCallback(() => {
     setError("");
     setRunning(true);
+
     setTimeout(() => {
       try {
-        const activeVars = vars.filter((v) => v.name.trim());
-        const activeParams = params.filter((p) => p.name.trim());
-        if (activeVars.length === 0)
+        const parsedVars = parseNameValueLines(varsText, "Variable");
+        const parsedParams = parseNameValueLines(paramsText, "Parameter");
+
+        if (parsedVars.length === 0) {
           throw new Error("Please define at least one variable.");
+        }
 
-        const varNames = activeVars.map((v) => v.name.trim());
-        const paramNames = activeParams.map((p) => p.name.trim());
+        const varNames = parsedVars.map((v) => v.name);
+        const paramNames = parsedParams.map((p) => p.name);
+        const initialState = parsedVars.map((v) => v.val);
+
         const paramsObj = {};
-        activeParams.forEach((p) => {
-          paramsObj[p.name.trim()] = Number(p.val);
+        parsedParams.forEach((p) => {
+          paramsObj[p.name] = p.val;
         });
-        const initialState = activeVars.map((v) => Number(v.val));
 
-        const modelTransitions = transitions
-          .filter((t) => t.rate.trim())
-          .map((t) => {
-            const rateFunc = compileExpression(t.rate, varNames, paramNames);
-            const wrappedRate = (s, p) => rateFunc(s, 0, p);
-            const vecParts = t.change
-              .split(",")
-              .map((x) => parseFloat(x.trim()));
-            const updateVector = new Array(varNames.length).fill(0);
-            for (let i = 0; i < varNames.length; i++) {
-              if (i < vecParts.length && !isNaN(vecParts[i]))
-                updateVector[i] = vecParts[i];
+        const activeTransitions = transitions.filter((transition) =>
+          transition.rate.trim(),
+        );
+        if (activeTransitions.length === 0) {
+          throw new Error("Please define at least one transition.");
+        }
+
+        const modelTransitions = activeTransitions.map((transition, trIdx) => {
+          const rateFunc = compileExpression(transition.rate, varNames, paramNames);
+          const wrappedRate = (state, params) => rateFunc(state, 0, params);
+          const deltaFuncs = varNames.map((varName, varIdx) => {
+            const expr = String(transition.deltas[varIdx] ?? "0").trim() || "0";
+            try {
+              return compileExpression(expr, varNames, paramNames);
+            } catch (event) {
+              throw new Error(
+                `Transition ${trIdx + 1} (${varName} change): ${event.message}`,
+              );
             }
-            return new Transition(updateVector, wrappedRate);
           });
 
-        if (modelTransitions.length === 0)
-          throw new Error("Please define at least one transition.");
+          const updateEvaluator = (state, t, params) =>
+            deltaFuncs.map((fn, varIdx) => {
+              const value = Number(fn(state, t, params));
+              if (!Number.isFinite(value)) {
+                throw new Error(
+                  `Transition ${trIdx + 1}: non-finite change for "${varNames[varIdx]}".`,
+                );
+              }
+              return value;
+            });
+
+          return new Transition(updateEvaluator, wrappedRate);
+        });
 
         const sim = new Gillespie(modelTransitions, paramsObj);
-        const n = Math.min(Math.max(parseInt(numSims) || 1, 1), 200);
+        const n = Math.min(Math.max(parseInt(numSims, 10) || 1, 1), 200);
         const allResults = [];
-        for (let i = 0; i < n; i++) {
+
+        for (let i = 0; i < n; i += 1) {
           allResults.push(sim.run([...initialState], Number(tMax)));
         }
 
-        let alpha = 1.0, lineWidth = 2;
-        if (n > 1)  { alpha = 0.6;  lineWidth = 1.5; }
-        if (n > 10) { alpha = 0.3;  lineWidth = 1; }
-        if (n > 50) { alpha = 0.15; lineWidth = 1; }
+        let alpha = 1.0;
+        let lineWidth = 2;
+        if (n > 1) {
+          alpha = 0.6;
+          lineWidth = 1.5;
+        }
+        if (n > 10) {
+          alpha = 0.3;
+          lineWidth = 1;
+        }
+        if (n > 50) {
+          alpha = 0.15;
+          lineWidth = 1;
+        }
 
-        const totalRawPts = allResults.reduce((sum, r) => sum + r.times.length, 0) * varNames.length;
+        const totalRawPts =
+          allResults.reduce((sum, result) => sum + result.times.length, 0) *
+          varNames.length;
         const step = totalRawPts > 15000 ? Math.ceil(totalRawPts / 15000) : 1;
 
         const datasets = [];
         allResults.forEach((result, simIdx) => {
-          const times   = result.times.filter((_, i) => i % step === 0);
-          const history = result.history.filter((_, i) => i % step === 0);
+          const times = result.times.filter((_, idx) => idx % step === 0);
+          const history = result.history.filter((_, idx) => idx % step === 0);
+
           varNames.forEach((label, idx) => {
             const color = hexToRgba(COLORS[idx % COLORS.length], alpha);
             datasets.push({
               label: simIdx === 0 ? label : "",
-              data: times.map((t, j) => ({ x: t, y: history[j][idx] })),
+              data: times.map((time, rowIdx) => ({ x: time, y: history[rowIdx][idx] })),
               borderColor: color,
               backgroundColor: color,
               borderWidth: lineWidth,
@@ -188,267 +300,235 @@ export default function GillespieSimulator() {
         });
 
         setChartDatasets(datasets);
-        setChartXMax(Math.max(...allResults.map((r) => r.times[r.times.length - 1])));
-        const avgEvents = Math.round(allResults.reduce((s, r) => s + r.times.length - 1, 0) / n);
-        setStats(
-          `${n} realization${n > 1 ? "s" : ""} · ${avgEvents} events avg`,
+        setChartXMax(
+          Math.max(...allResults.map((result) => result.times[result.times.length - 1])),
         );
-      } catch (e) {
-        setError(e.message);
+
+        const avgEvents = Math.round(
+          allResults.reduce((sum, result) => sum + result.times.length - 1, 0) / n,
+        );
+        setStats(`${n} realization${n > 1 ? "s" : ""} · ${avgEvents} events avg`);
+      } catch (event) {
+        setError(event.message);
       } finally {
         setRunning(false);
       }
     }, 50);
-  }, [vars, params, transitions, tMax, numSims]);
+  }, [numSims, paramsText, tMax, transitions, varsText]);
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden bg-slate-50">
-      {/* ── Left panel ── */}
-      <div className="w-80 shrink-0 flex flex-col bg-white border-r border-slate-200">
-        {/* Title */}
-        <div className="px-4 py-3 border-b border-slate-200">
-          <h1 className="text-base font-bold text-slate-800 leading-tight">
-            Reaction Network Designer
-          </h1>
-          <p className="text-xs text-slate-400 mt-0.5">
-            CTMC Gillespie — Exact Simulation
-          </p>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex border-b border-slate-200">
-          {TABS.map(({ id, label, icon }) => (
-            <button
-              key={id}
-              onClick={() => setActiveTab(id)}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold transition border-b-2 ${
-                activeTab === id
-                  ? "border-blue-500 text-blue-600 bg-blue-50"
-                  : "border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50"
-              }`}
-            >
-              <FontAwesomeIcon icon={icon} className="text-[11px]" />
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {/* Tab content — scrollable */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 space-y-2">
-          {activeTab === "vars" && (
-            <>
-              {vars.map((v) => (
-                <div
-                  key={v.id}
-                  className="flex gap-2 items-center bg-slate-50 px-2 py-1.5 rounded border border-slate-100"
+    <div className="flex flex-col h-auto md:h-[calc(100vh-3.5rem)] bg-slate-300">
+      <div className="flex-1 min-h-0 flex flex-col md:flex-row">
+        <aside className="w-full md:w-[470px] bg-slate-100 border-r border-slate-300 overflow-hidden flex flex-col">
+          <div className="grid grid-cols-3 border-b border-slate-300 bg-slate-200">
+            {TAB_ITEMS.map((tab) => {
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`py-2 text-xs font-semibold border-r border-slate-300 last:border-r-0 ${
+                    isActive
+                      ? "bg-white text-slate-900"
+                      : "bg-slate-200 text-slate-500 hover:text-slate-700"
+                  }`}
                 >
-                  <input
-                    type="text"
-                    placeholder="Name"
-                    value={v.name}
-                    onChange={(e) => updateVar(v.id, "name", e.target.value)}
-                    className="code-input flex-1 min-w-0 border rounded px-2 py-1 text-sm bg-white focus:outline-blue-400"
-                  />
-                  <input
-                    type="number"
-                    placeholder="Init"
-                    value={v.val}
-                    onChange={(e) => updateVar(v.id, "val", e.target.value)}
-                    className="w-16 shrink-0 border rounded px-2 py-1 text-sm bg-white"
-                  />
-                  <button
-                    onClick={() => removeVar(v.id)}
-                    className="shrink-0 text-slate-300 hover:text-red-400"
-                  >
-                    <FontAwesomeIcon icon={faTimes} />
-                  </button>
-                </div>
-              ))}
-              <button
-                onClick={addVar}
-                className="w-full text-xs text-blue-500 hover:text-blue-700 border border-dashed border-blue-200 hover:border-blue-400 rounded py-1.5 transition"
-              >
-                <FontAwesomeIcon icon={faPlus} className="mr-1" />
-                Add Variable
-              </button>
-            </>
-          )}
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
 
-          {activeTab === "params" && (
-            <>
-              {params.map((p) => (
-                <div
-                  key={p.id}
-                  className="flex gap-2 items-center bg-slate-50 px-2 py-1.5 rounded border border-slate-100"
-                >
-                  <input
-                    type="text"
-                    placeholder="Name"
-                    value={p.name}
-                    onChange={(e) => updateParam(p.id, "name", e.target.value)}
-                    className="code-input flex-1 min-w-0 border rounded px-2 py-1 text-sm bg-white focus:outline-purple-400"
-                  />
-                  <input
-                    type="number"
-                    step="any"
-                    value={p.val}
-                    onChange={(e) => updateParam(p.id, "val", e.target.value)}
-                    className="w-20 shrink-0 border rounded px-2 py-1 text-sm bg-white"
-                  />
-                  <button
-                    onClick={() => removeParam(p.id)}
-                    className="shrink-0 text-slate-300 hover:text-red-400"
-                  >
-                    <FontAwesomeIcon icon={faTimes} />
-                  </button>
-                </div>
-              ))}
-              <button
-                onClick={addParam}
-                className="w-full text-xs text-purple-500 hover:text-purple-700 border border-dashed border-purple-200 hover:border-purple-400 rounded py-1.5 transition"
-              >
-                <FontAwesomeIcon icon={faPlus} className="mr-1" />
-                Add Parameter
-              </button>
-            </>
-          )}
-
-          {activeTab === "transitions" && (
-            <>
-              <p className="text-xs text-slate-400 pb-1">
-                <strong>Rate:</strong> e.g. <code>k * Plants</code> &nbsp;
-                <strong>Change:</strong> comma-separated integers.
-              </p>
-              {transitions.map((tr) => (
-                <div
-                  key={tr.id}
-                  className="relative bg-slate-50 px-2 py-2 pr-7 rounded border border-slate-100"
-                >
-                  <button
-                    onClick={() => removeTrans(tr.id)}
-                    className="absolute top-2 right-2 text-slate-300 hover:text-red-400"
-                  >
-                    <FontAwesomeIcon icon={faTimes} />
-                  </button>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-[10px] font-bold text-slate-400 w-12 text-right shrink-0">
-                      RATE
-                    </span>
-                    <input
-                      type="text"
-                      placeholder="e.g. k * Plants"
-                      value={tr.rate}
-                      onChange={(e) =>
-                        updateTrans(tr.id, "rate", e.target.value)
-                      }
-                      className="code-input flex-1 min-w-0 border rounded px-2 py-1 text-sm bg-white focus:outline-orange-400"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold text-slate-400 w-12 text-right shrink-0">
-                      CHANGE
-                    </span>
-                    <input
-                      type="text"
-                      placeholder="e.g. -1, 1, 0"
-                      value={tr.change}
-                      onChange={(e) =>
-                        updateTrans(tr.id, "change", e.target.value)
-                      }
-                      className="code-input flex-1 min-w-0 border rounded px-2 py-1 text-sm bg-white focus:outline-orange-400"
-                    />
-                  </div>
-                </div>
-              ))}
-              <button
-                onClick={addTrans}
-                className="w-full text-xs text-orange-500 hover:text-orange-700 border border-dashed border-orange-200 hover:border-orange-400 rounded py-1.5 transition"
-              >
-                <FontAwesomeIcon icon={faPlus} className="mr-1" />
-                Add Transition
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* ── Right panel ── */}
-      <div className="flex-1 flex flex-col p-4 gap-3 min-w-0">
-        {/* Chart */}
-        <div className="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm p-3 min-h-0">
-          <SimChart
-            datasets={chartDatasets}
-            xMax={chartXMax}
-            xLabel="Time"
-            yLabel="Count"
-            showTooltips={parseInt(numSims) <= 1}
-          />
-        </div>
-
-        {/* Control bar */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3">
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-2">
-              <label className="text-xs font-semibold text-slate-500 whitespace-nowrap">
-                Max Time
-              </label>
-              <input
-                type="number"
-                value={tMax}
-                step="any"
-                onChange={(e) => setTMax(e.target.value)}
-                className="w-24 border rounded px-2 py-1.5 text-sm"
+          <div className="flex-1 overflow-y-auto">
+            {activeTab === "vars" && (
+              <ExpressionListSection
+                title="Variables"
+                helperText='One line each: Name = initialValue'
+                rows={varRows}
+                onUpdateRow={updateRow(setVarRows)}
+                onInsertRowAfter={insertRow(setVarRows)}
+                onRemoveRow={removeRow(setVarRows)}
+                placeholder="Plants = 500"
               />
-            </div>
+            )}
 
-            <div className="flex items-center gap-2">
-              <label className="text-xs font-semibold text-slate-500 whitespace-nowrap">
-                Realizations
-              </label>
-              <input
-                type="number"
-                value={numSims}
-                min="1"
-                max="200"
-                step="1"
-                onChange={(e) => setNumSims(e.target.value)}
-                className="w-20 border rounded px-2 py-1.5 text-sm font-bold text-blue-700 bg-blue-50"
+            {activeTab === "params" && (
+              <ExpressionListSection
+                title="Parameters"
+                helperText='One line each: name = value'
+                rows={paramRows}
+                onUpdateRow={updateRow(setParamRows)}
+                onInsertRowAfter={insertRow(setParamRows)}
+                onRemoveRow={removeRow(setParamRows)}
+                placeholder="k = 0.1"
               />
-            </div>
+            )}
 
-            <button
-              onClick={runSimulation}
-              disabled={running}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold px-5 py-1.5 rounded-lg shadow-sm transition text-sm"
-            >
-              {running ? (
-                <>
-                  <div className="loader text-blue-300" /> Running…
-                </>
-              ) : (
-                "▶ Run Simulation"
-              )}
-            </button>
+            {activeTab === "transitions" && (
+              <section className="border-b border-slate-300">
+                <div className="px-3 py-2 bg-slate-200 border-b border-slate-300">
+                  <div className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
+                    Transitions
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Each transition has separate Rate and Change sub-rows.
+                  </p>
+                  {variableNamesPreview.length > 0 && (
+                    <p className="text-[11px] text-slate-600 mt-1">
+                      Order: {variableNamesPreview.join(", ")}
+                    </p>
+                  )}
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Change inputs accept expressions (for example, <code>-X</code> for
+                    extinction of variable <code>X</code>).
+                  </p>
+                </div>
 
-            <button
-              onClick={loadPreset}
-              className="text-xs text-slate-400 hover:text-slate-600 underline transition"
-            >
-              Reset to Food Chain
-            </button>
+                {transitions.map((transition, index) => (
+                  <div
+                    key={transition.id}
+                    className="grid grid-cols-[46px_1fr_36px] border-b border-slate-300 bg-slate-100"
+                  >
+                    <div className="flex items-start justify-center pt-2 text-xs text-slate-500 border-r border-slate-300">
+                      {index + 1}
+                    </div>
 
-            {stats && (
-              <span className="ml-auto text-xs text-slate-400 font-mono">
-                {stats}
-              </span>
+                    <div className="p-2.5 space-y-2">
+                      <div className="space-y-1">
+                        <label className="text-[11px] uppercase tracking-wide text-emerald-700 font-semibold">
+                          Rate
+                        </label>
+                        <input
+                          type="text"
+                          value={transition.rate}
+                          onChange={(event) =>
+                            updateTransition(transition.id, "rate", event.target.value)
+                          }
+                          spellCheck={false}
+                          className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-sm code-input bg-white"
+                          placeholder="h_eat * Plants * Herbivores"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] uppercase tracking-wide text-orange-700 font-semibold">
+                          Change
+                        </label>
+                        {variableNamesPreview.length === 0 ? (
+                          <div className="text-[11px] text-slate-500 px-2 py-1.5 bg-white border border-slate-300 rounded">
+                            Define valid variable lines to enable change boxes.
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap gap-2">
+                            {variableNamesPreview.map((varName, varIdx) => (
+                              <div
+                                key={`${transition.id}-${varName}`}
+                                className="bg-white border border-slate-300 rounded px-1 py-0.5"
+                              >
+                                <input
+                                  type="text"
+                                  value={transition.deltas[varIdx] ?? "0"}
+                                  onChange={(event) =>
+                                    updateTransitionDelta(
+                                      transition.id,
+                                      varIdx,
+                                      event.target.value,
+                                    )
+                                  }
+                                  title={varName}
+                                  className="w-14 text-xs bg-transparent outline-none code-input text-slate-800"
+                                  placeholder="0"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => removeTransition(transition.id)}
+                      className="text-slate-400 hover:text-red-500 border-l border-slate-300 text-sm"
+                      aria-label="Delete transition"
+                    >
+                      x
+                    </button>
+                  </div>
+                ))}
+
+                <button
+                  type="button"
+                  onClick={addTransition}
+                  className="w-full text-left px-4 py-2 text-sm text-slate-500 hover:text-slate-700 hover:bg-slate-200 transition"
+                >
+                  + Add transition
+                </button>
+              </section>
             )}
           </div>
 
           {error && (
-            <div className="mt-2 text-xs text-red-600 bg-red-50 px-3 py-2 rounded border border-red-200 font-mono">
-              {error}
+            <div className="p-3 border-t border-slate-300 space-y-2">
+              {error && (
+                <div className="text-xs text-red-700 bg-red-100 border border-red-200 px-2 py-1.5 rounded whitespace-pre-wrap">
+                  {error}
+                </div>
+              )}
             </div>
           )}
+        </aside>
+
+        <div className="flex-1 min-h-[360px] md:min-h-0 p-2 md:p-3 bg-slate-200 flex flex-col gap-2">
+          <div className="flex-1 min-h-0 border border-slate-300 bg-white">
+            <SimChart
+              datasets={chartDatasets}
+              xMax={chartXMax}
+              xLabel="Time"
+              yLabel="Count"
+              showTooltips={parseInt(numSims, 10) <= 1}
+            />
+          </div>
+
+          <div className="bg-white border border-slate-300 px-3 py-2 flex flex-wrap items-center gap-2">
+            <label className="text-[11px] text-slate-500">t max</label>
+            <input
+              type="number"
+              value={tMax}
+              step="any"
+              onChange={(event) => setTMax(event.target.value)}
+              className="w-20 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
+            />
+
+            <label className="text-[11px] text-slate-500">runs</label>
+            <input
+              type="number"
+              value={numSims}
+              min="1"
+              max="200"
+              step="1"
+              onChange={(event) => setNumSims(event.target.value)}
+              className="w-16 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
+            />
+
+            <button
+              onClick={runSimulation}
+              disabled={running}
+              className="w-24 py-1.5 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-xs font-semibold text-white text-center"
+            >
+              {running ? "Running..." : "Run"}
+            </button>
+
+            <button
+              onClick={loadPreset}
+              className="w-20 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs"
+            >
+              Reset
+            </button>
+
+            {stats && <span className="ml-auto text-xs text-slate-500 font-mono">{stats}</span>}
+          </div>
         </div>
       </div>
     </div>

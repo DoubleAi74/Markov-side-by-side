@@ -1,9 +1,9 @@
 // Fixed time-step CTMP engine for time-dependent rates (extracted from CTMP_inhomo.html)
 
 export class Transition {
-  constructor(updateVector, rateFunc) {
+  constructor(updateSpec, rateFunc) {
     this.rateFunc = rateFunc;
-    this.updateVector = updateVector;
+    this.updateSpec = updateSpec;
   }
 
   getRate(state, t, params) {
@@ -14,10 +14,21 @@ export class Transition {
     }
   }
 
-  applyUpdate(state) {
-    return state.map((val, i) =>
-      Math.max(0, Math.floor(val + (this.updateVector[i] || 0)))
-    );
+  resolveDelta(state, t, params) {
+    if (typeof this.updateSpec === "function") {
+      return this.updateSpec(state, t, params);
+    }
+    return this.updateSpec;
+  }
+
+  applyUpdate(state, t, params) {
+    const deltas = this.resolveDelta(state, t, params);
+    return state.map((val, i) => {
+      const raw = deltas?.[i] ?? 0;
+      const delta = Number(raw);
+      const next = val + (Number.isFinite(delta) ? delta : 0);
+      return Math.max(0, Math.floor(next));
+    });
   }
 }
 
@@ -54,7 +65,7 @@ export class TimeStepper {
         for (let i = 0; i < probs.length; i++) {
           cumulative += probs[i];
           if (U < cumulative) {
-            state = this.transitions[i].applyUpdate(state);
+            state = this.transitions[i].applyUpdate(state, t, this.params);
             eventOccurred = true;
             break;
           }

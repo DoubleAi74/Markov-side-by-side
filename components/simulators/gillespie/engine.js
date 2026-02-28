@@ -1,9 +1,9 @@
 // Gillespie exact SSA engine (extracted from CTMP_standard.html)
 
 export class Transition {
-  constructor(updateVector, rateFunc) {
+  constructor(updateSpec, rateFunc) {
     this.rateFunc = rateFunc;
-    this.updateVector = updateVector;
+    this.updateSpec = updateSpec;
   }
 
   getRate(state, params) {
@@ -14,10 +14,21 @@ export class Transition {
     }
   }
 
-  applyUpdate(state) {
-    return state.map((val, i) =>
-      Math.max(0, Math.floor(val + (this.updateVector[i] || 0)))
-    );
+  resolveDelta(state, t, params) {
+    if (typeof this.updateSpec === "function") {
+      return this.updateSpec(state, t, params);
+    }
+    return this.updateSpec;
+  }
+
+  applyUpdate(state, t, params) {
+    const deltas = this.resolveDelta(state, t, params);
+    return state.map((val, i) => {
+      const raw = deltas?.[i] ?? 0;
+      const delta = Number(raw);
+      const next = val + (Number.isFinite(delta) ? delta : 0);
+      return Math.max(0, Math.floor(next));
+    });
   }
 }
 
@@ -61,7 +72,7 @@ export class Gillespie {
         }
       }
 
-      state = this.transitions[chosenIdx].applyUpdate(state);
+      state = this.transitions[chosenIdx].applyUpdate(state, t, this.params);
       times.push(t);
       history.push([...state]);
     }

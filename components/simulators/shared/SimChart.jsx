@@ -33,6 +33,16 @@ Chart.register(
  *  - yLabel: string (default "Count")
  *  - stepped: boolean — use stepped 'after' lines (for CTMPs)
  */
+function gridColor(ctx) {
+  const value = ctx.tick?.value;
+  if (value === 0) return 'rgba(15, 23, 42, 0.65)';
+  return 'rgba(15, 23, 42, 0.16)';
+}
+
+function gridWidth(ctx) {
+  return ctx.tick?.value === 0 ? 2 : 1;
+}
+
 export default function SimChart({ datasets = [], xMax, xLabel = 'Time', yLabel = 'Count', stepped = false, showTooltips = true }) {
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
@@ -47,27 +57,45 @@ export default function SimChart({ datasets = [], xMax, xLabel = 'Time', yLabel 
         responsive: true,
         maintainAspectRatio: false,
         animation: false,
+        interaction: {
+          mode: 'nearest',
+          axis: 'xy',
+          intersect: false,
+        },
         elements: {
           point: { radius: 0, hitRadius: 5 },
-          line: { borderWidth: 2 },
+          line: { borderWidth: 2, tension: 0 },
         },
         scales: {
           x: {
             type: 'linear',
             title: { display: true, text: xLabel },
             min: 0,
+            grid: {
+              color: gridColor,
+              lineWidth: gridWidth,
+            },
+            ticks: {
+              color: '#334155',
+              maxTicksLimit: 14,
+            },
           },
           y: {
             title: { display: true, text: yLabel },
             beginAtZero: true,
+            grid: {
+              color: gridColor,
+              lineWidth: gridWidth,
+            },
+            ticks: {
+              color: '#334155',
+              maxTicksLimit: 12,
+            },
           },
         },
         plugins: {
           legend: {
-            position: 'top',
-            labels: {
-              filter: (item) => item.text !== '',
-            },
+            display: false,
           },
           tooltip: { mode: 'nearest', axis: 'x', intersect: false },
         },
@@ -80,17 +108,23 @@ export default function SimChart({ datasets = [], xMax, xLabel = 'Time', yLabel 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Update chart whenever datasets/xMax/showTooltips change
+  // Update chart whenever datasets/options change
   useEffect(() => {
-    if (!chartRef.current || datasets.length === 0) return;
+    if (!chartRef.current) return;
     chartRef.current.data.datasets = datasets;
-    if (xMax != null) chartRef.current.options.scales.x.max = xMax;
+    chartRef.current.options.scales.x.title.text = xLabel;
+    chartRef.current.options.scales.y.title.text = yLabel;
+    if (xMax != null) {
+      chartRef.current.options.scales.x.max = xMax;
+    } else {
+      delete chartRef.current.options.scales.x.max;
+    }
     chartRef.current.options.plugins.tooltip.enabled = showTooltips;
     chartRef.current.update();
-  }, [datasets, xMax, showTooltips]);
+  }, [datasets, xMax, xLabel, yLabel, showTooltips]);
 
   return (
-    <div className="relative w-full h-full min-h-[400px]">
+    <div className="relative w-full h-full min-h-[280px] md:min-h-[400px]">
       <canvas ref={canvasRef} />
     </div>
   );
