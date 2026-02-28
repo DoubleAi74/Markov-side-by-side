@@ -3,18 +3,10 @@
 import { useCallback, useState } from "react";
 import SimChart from "../shared/SimChart";
 import ExpressionListSection from "../shared/ExpressionListSection";
+import { SDE_SERIES_COLORS, getSeriesColor, hexToRgba } from "../shared/seriesColors";
 import { SDEComponent, TimeStepperSDE } from "./engine";
 import { compileExpression } from "@/lib/compile";
 import { assignmentsToText, parseNameValueLines } from "@/lib/modelParsers";
-
-const BASE_COLORS = [
-  "#2563eb",
-  "#dc2626",
-  "#16a34a",
-  "#d97706",
-  "#9333ea",
-  "#0891b2",
-];
 
 const TAB_ITEMS = [
   { id: "vars", label: "Variables" },
@@ -48,13 +40,6 @@ const DEFAULT_PRESET = {
   dt: 0.005,
   numSims: 1,
 };
-
-function hexToRgba(hex, alpha) {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
 
 function makeId() {
   return Math.random().toString(36).slice(2);
@@ -262,7 +247,10 @@ export default function SDESimulator() {
           const history = result.history.filter((_, idx) => idx % step === 0);
 
           varNames.forEach((label, varIdx) => {
-            const color = hexToRgba(BASE_COLORS[varIdx % BASE_COLORS.length], alpha);
+            const color = hexToRgba(
+              getSeriesColor(SDE_SERIES_COLORS, varIdx),
+              alpha,
+            );
             datasets.push({
               label: simIdx === 0 ? label : "",
               data: times.map((time, rowIdx) => ({ x: time, y: history[rowIdx][varIdx] })),
@@ -277,9 +265,7 @@ export default function SDESimulator() {
 
         setChartDatasets(datasets);
         setChartXMax(allResults[0].times[allResults[0].times.length - 1]);
-        setStats(
-          `${n} realization${n > 1 ? "s" : ""} · ${allResults[0].times.length} pts/path`,
-        );
+        setStats(`${allResults[0].times.length} pts/path`);
       } catch (event) {
         setError(event.message);
       } finally {
@@ -341,7 +327,11 @@ export default function SDESimulator() {
                     key={component.id}
                     className="grid grid-cols-[46px_1fr_36px] border-b border-slate-300 bg-slate-100"
                   >
-                    <div className="flex items-start justify-center pt-2 text-xs text-slate-500 border-r border-slate-300">
+                    <div className="relative flex items-start justify-center pt-2 text-xs text-slate-500 border-r border-slate-300">
+                      <span
+                        className="absolute left-1 top-1/2 -translate-y-1/2 h-6 w-1 rounded-full"
+                        style={{ backgroundColor: getSeriesColor(SDE_SERIES_COLORS, index) }}
+                      />
                       {index + 1}
                     </div>
 
@@ -446,51 +436,59 @@ export default function SDESimulator() {
           </div>
 
           <div className="bg-white border border-slate-300 px-3 py-2 flex flex-wrap items-center gap-2">
-            <label className="text-[11px] text-slate-500">t max</label>
-            <input
-              type="number"
-              value={tMax}
-              step="any"
-              onChange={(event) => setTMax(event.target.value)}
-              className="w-16 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
-            />
+            <div className="order-1 flex items-center gap-2 mr-1">
+              <button
+                onClick={runSimulation}
+                disabled={running}
+                className="w-24 py-1.5 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-xs font-semibold text-white text-center"
+              >
+                {running ? "Running..." : "Run"}
+              </button>
 
-            <label className="text-[11px] text-slate-500">dt</label>
-            <input
-              type="number"
-              value={dt}
-              step="0.001"
-              onChange={(event) => setDt(event.target.value)}
-              className="w-20 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
-            />
+              <button
+                onClick={loadPreset}
+                className="w-20 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs"
+              >
+                Reset
+              </button>
+            </div>
 
-            <label className="text-[11px] text-slate-500">runs</label>
-            <input
-              type="number"
-              value={numSims}
-              min="1"
-              max="200"
-              step="1"
-              onChange={(event) => setNumSims(event.target.value)}
-              className="w-16 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
-            />
+            <div className="order-2 flex items-center gap-2 flex-nowrap whitespace-nowrap max-w-full overflow-x-auto">
+              <label className="text-[11px] text-slate-500">t max</label>
+              <input
+                type="number"
+                value={tMax}
+                step="any"
+                onChange={(event) => setTMax(event.target.value)}
+                className="w-16 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
+              />
 
-            <button
-              onClick={runSimulation}
-              disabled={running}
-              className="w-24 py-1.5 rounded bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-xs font-semibold text-white text-center"
-            >
-              {running ? "Running..." : "Run"}
-            </button>
+              <label className="text-[11px] text-slate-500">dt</label>
+              <input
+                type="number"
+                value={dt}
+                step="0.001"
+                onChange={(event) => setDt(event.target.value)}
+                className="w-20 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
+              />
 
-            <button
-              onClick={loadPreset}
-              className="w-20 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs"
-            >
-              Reset
-            </button>
+              <label className="text-[11px] text-slate-500">runs</label>
+              <input
+                type="number"
+                value={numSims}
+                min="1"
+                max="200"
+                step="1"
+                onChange={(event) => setNumSims(event.target.value)}
+                className="w-16 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
+              />
+            </div>
 
-            {stats && <span className="ml-auto text-xs text-slate-500 font-mono">{stats}</span>}
+            {stats && (
+              <span className="order-3 md:order-3 md:ml-auto text-xs text-slate-500 font-mono">
+                {stats}
+              </span>
+            )}
           </div>
         </div>
       </div>

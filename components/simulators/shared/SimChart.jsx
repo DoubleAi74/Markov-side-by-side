@@ -31,6 +31,8 @@ Chart.register(
  *  - xMax: number, sets the x-axis maximum
  *  - xLabel: string (default "Time")
  *  - yLabel: string (default "Count")
+ *  - xTickSignificantFigures: optional max significant figures for x ticks
+ *  - xTickAutoSkip: optional boolean to enable/disable x tick auto-skip
  *  - stepped: boolean — use stepped 'after' lines (for CTMPs)
  */
 function gridColor(ctx) {
@@ -43,7 +45,36 @@ function gridWidth(ctx) {
   return ctx.tick?.value === 0 ? 2 : 1;
 }
 
-export default function SimChart({ datasets = [], xMax, xLabel = 'Time', yLabel = 'Count', stepped = false, showTooltips = true }) {
+function formatAxisTick(value, xTickSignificantFigures) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return value;
+
+  const absValue = Math.abs(numeric);
+  const epsilon = Math.max(1e-8, absValue * 1e-6);
+  const nearestInteger = Math.round(numeric);
+  if (Math.abs(numeric - nearestInteger) <= epsilon) {
+    return String(nearestInteger);
+  }
+
+  if (Number.isFinite(xTickSignificantFigures) && xTickSignificantFigures > 0) {
+    const sigFigs = Math.max(1, Math.min(21, Math.floor(xTickSignificantFigures)));
+    return String(Number(numeric.toPrecision(sigFigs)));
+  }
+
+  const rounded = Number(numeric.toFixed(6));
+  return String(rounded);
+}
+
+export default function SimChart({
+  datasets = [],
+  xMax,
+  xLabel = 'Time',
+  yLabel = 'Count',
+  xTickSignificantFigures,
+  xTickAutoSkip = true,
+  stepped = false,
+  showTooltips = true
+}) {
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
 
@@ -78,6 +109,7 @@ export default function SimChart({ datasets = [], xMax, xLabel = 'Time', yLabel 
             ticks: {
               color: '#334155',
               maxTicksLimit: 14,
+              autoSkip: xTickAutoSkip,
             },
           },
           y: {
@@ -114,6 +146,9 @@ export default function SimChart({ datasets = [], xMax, xLabel = 'Time', yLabel 
     chartRef.current.data.datasets = datasets;
     chartRef.current.options.scales.x.title.text = xLabel;
     chartRef.current.options.scales.y.title.text = yLabel;
+    chartRef.current.options.scales.x.ticks.callback = (value) =>
+      formatAxisTick(value, xTickSignificantFigures);
+    chartRef.current.options.scales.x.ticks.autoSkip = xTickAutoSkip;
     if (xMax != null) {
       chartRef.current.options.scales.x.max = xMax;
     } else {
@@ -121,7 +156,7 @@ export default function SimChart({ datasets = [], xMax, xLabel = 'Time', yLabel 
     }
     chartRef.current.options.plugins.tooltip.enabled = showTooltips;
     chartRef.current.update();
-  }, [datasets, xMax, xLabel, yLabel, showTooltips]);
+  }, [datasets, xMax, xLabel, yLabel, xTickSignificantFigures, xTickAutoSkip, showTooltips]);
 
   return (
     <div className="relative w-full h-full min-h-[280px] md:min-h-[400px]">

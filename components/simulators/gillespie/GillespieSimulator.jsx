@@ -3,32 +3,20 @@
 import { useCallback, useMemo, useState } from "react";
 import SimChart from "../shared/SimChart";
 import ExpressionListSection from "../shared/ExpressionListSection";
+import {
+  GILLESPIE_SERIES_COLORS,
+  getSeriesColor,
+  hexToRgba,
+} from "../shared/seriesColors";
 import { Transition, Gillespie } from "./engine";
 import { compileExpression } from "@/lib/compile";
 import { assignmentsToText, parseNameValueLines } from "@/lib/modelParsers";
-
-const COLORS = [
-  "#10b981",
-  "#3b82f6",
-  "#f59e0b",
-  "#ef4444",
-  "#8b5cf6",
-  "#ec4899",
-  "#6366f1",
-];
 
 const TAB_ITEMS = [
   { id: "vars", label: "Variables" },
   { id: "params", label: "Parameters" },
   { id: "transitions", label: "Transitions" },
 ];
-
-function hexToRgba(hex, alpha) {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
 
 const FOOD_CHAIN_PRESET = {
   vars: [
@@ -286,7 +274,10 @@ export default function GillespieSimulator() {
           const history = result.history.filter((_, idx) => idx % step === 0);
 
           varNames.forEach((label, idx) => {
-            const color = hexToRgba(COLORS[idx % COLORS.length], alpha);
+            const color = hexToRgba(
+              getSeriesColor(GILLESPIE_SERIES_COLORS, idx),
+              alpha,
+            );
             datasets.push({
               label: simIdx === 0 ? label : "",
               data: times.map((time, rowIdx) => ({ x: time, y: history[rowIdx][idx] })),
@@ -300,14 +291,22 @@ export default function GillespieSimulator() {
         });
 
         setChartDatasets(datasets);
-        setChartXMax(
-          Math.max(...allResults.map((result) => result.times[result.times.length - 1])),
-        );
+        {
+          const requestedTMax = Number(tMax);
+          const observedMaxTime = Math.max(
+            ...allResults.map((result) => result.times[result.times.length - 1]),
+          );
+          setChartXMax(
+            Number.isFinite(requestedTMax) && requestedTMax > 0
+              ? requestedTMax
+              : observedMaxTime,
+          );
+        }
 
         const avgEvents = Math.round(
           allResults.reduce((sum, result) => sum + result.times.length - 1, 0) / n,
         );
-        setStats(`${n} realization${n > 1 ? "s" : ""} · ${avgEvents} events avg`);
+        setStats(`${avgEvents} events avg`);
       } catch (event) {
         setError(event.message);
       } finally {
@@ -350,6 +349,10 @@ export default function GillespieSimulator() {
                 onInsertRowAfter={insertRow(setVarRows)}
                 onRemoveRow={removeRow(setVarRows)}
                 placeholder="Plants = 500"
+                showRowColor
+                colorForRow={(index) =>
+                  getSeriesColor(GILLESPIE_SERIES_COLORS, index)
+                }
               />
             )}
 
@@ -487,47 +490,57 @@ export default function GillespieSimulator() {
               xMax={chartXMax}
               xLabel="Time"
               yLabel="Count"
+              xTickSignificantFigures={3}
+              xTickAutoSkip={false}
               showTooltips={parseInt(numSims, 10) <= 1}
             />
           </div>
 
           <div className="bg-white border border-slate-300 px-3 py-2 flex flex-wrap items-center gap-2">
-            <label className="text-[11px] text-slate-500">t max</label>
-            <input
-              type="number"
-              value={tMax}
-              step="any"
-              onChange={(event) => setTMax(event.target.value)}
-              className="w-20 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
-            />
+            <div className="order-1 flex items-center gap-2 mr-1">
+              <button
+                onClick={runSimulation}
+                disabled={running}
+                className="w-24 py-1.5 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-xs font-semibold text-white text-center"
+              >
+                {running ? "Running..." : "Run"}
+              </button>
 
-            <label className="text-[11px] text-slate-500">runs</label>
-            <input
-              type="number"
-              value={numSims}
-              min="1"
-              max="200"
-              step="1"
-              onChange={(event) => setNumSims(event.target.value)}
-              className="w-16 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
-            />
+              <button
+                onClick={loadPreset}
+                className="w-20 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs"
+              >
+                Reset
+              </button>
+            </div>
 
-            <button
-              onClick={runSimulation}
-              disabled={running}
-              className="w-24 py-1.5 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-xs font-semibold text-white text-center"
-            >
-              {running ? "Running..." : "Run"}
-            </button>
+            <div className="order-2 flex items-center gap-2 flex-nowrap whitespace-nowrap max-w-full overflow-x-auto">
+              <label className="text-[11px] text-slate-500">t max</label>
+              <input
+                type="number"
+                value={tMax}
+                step="any"
+                onChange={(event) => setTMax(event.target.value)}
+                className="w-20 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
+              />
 
-            <button
-              onClick={loadPreset}
-              className="w-20 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs"
-            >
-              Reset
-            </button>
+              <label className="text-[11px] text-slate-500">runs</label>
+              <input
+                type="number"
+                value={numSims}
+                min="1"
+                max="200"
+                step="1"
+                onChange={(event) => setNumSims(event.target.value)}
+                className="w-16 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
+              />
+            </div>
 
-            {stats && <span className="ml-auto text-xs text-slate-500 font-mono">{stats}</span>}
+            {stats && (
+              <span className="order-3 md:order-3 md:ml-auto text-xs text-slate-500 font-mono">
+                {stats}
+              </span>
+            )}
           </div>
         </div>
       </div>

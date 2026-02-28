@@ -2,20 +2,6 @@
 
 import { useRef, useState } from "react";
 
-const ROW_COLORS = [
-  "#2563eb",
-  "#16a34a",
-  "#dc2626",
-  "#9333ea",
-  "#ea580c",
-  "#0891b2",
-  "#ca8a04",
-];
-
-function rowColor(index) {
-  return ROW_COLORS[index % ROW_COLORS.length];
-}
-
 export default function ExpressionListSection({
   title,
   helperText,
@@ -26,6 +12,8 @@ export default function ExpressionListSection({
   extraHint,
   placeholder = "",
   minRows = 1,
+  showRowColor = false,
+  colorForRow = null,
 }) {
   const [focusedId, setFocusedId] = useState(null);
   const inputRefs = useRef({});
@@ -74,10 +62,12 @@ export default function ExpressionListSection({
               }`}
             >
               <div className="relative flex items-center justify-center border-r border-slate-300">
-                <span
-                  className="absolute left-1 top-1/2 -translate-y-1/2 h-6 w-1 rounded-full"
-                  style={{ backgroundColor: rowColor(index) }}
-                />
+                {showRowColor && (
+                  <span
+                    className="absolute left-1 top-1/2 -translate-y-1/2 h-6 w-1 rounded-full"
+                    style={{ backgroundColor: colorForRow ? colorForRow(index) : "#64748b" }}
+                  />
+                )}
                 <span className="text-xs text-slate-500">{index + 1}</span>
               </div>
 

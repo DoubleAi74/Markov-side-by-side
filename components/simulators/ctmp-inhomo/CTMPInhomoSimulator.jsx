@@ -3,6 +3,11 @@
 import { useCallback, useMemo, useState } from "react";
 import SimChart from "../shared/SimChart";
 import ExpressionListSection from "../shared/ExpressionListSection";
+import {
+  CTMP_INHOMO_SERIES_COLORS,
+  getSeriesColor,
+  hexToRgba,
+} from "../shared/seriesColors";
 import { Transition, TimeStepper } from "./engine";
 import { buildHelperBlock, compileExpression } from "@/lib/compile";
 import {
@@ -12,20 +17,11 @@ import {
   parseNameValueLines,
 } from "@/lib/modelParsers";
 
-const COLORS = ["#4f46e5", "#db2777", "#059669", "#d97706", "#7c3aed"];
-
 const TAB_ITEMS = [
   { id: "vars", label: "Variables" },
   { id: "params", label: "Parameters" },
   { id: "transitions", label: "Transitions" },
 ];
-
-function hexToRgba(hex, alpha) {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
 
 const PRESETS = {
   seasonal: {
@@ -298,7 +294,10 @@ export default function CTMPInhomoSimulator() {
           const times = result.times.filter((_, idx) => idx % step === 0);
           const history = result.history.filter((_, idx) => idx % step === 0);
           varNames.forEach((label, idx) => {
-            const color = hexToRgba(COLORS[idx % COLORS.length], alpha);
+            const color = hexToRgba(
+              getSeriesColor(CTMP_INHOMO_SERIES_COLORS, idx),
+              alpha,
+            );
             datasets.push({
               label: simIdx === 0 ? label : "",
               data: times.map((time, rowIdx) => ({ x: time, y: history[rowIdx][idx] })),
@@ -313,9 +312,7 @@ export default function CTMPInhomoSimulator() {
 
         setChartDatasets(datasets);
         setChartXMax(allResults[0].times[allResults[0].times.length - 1]);
-        setStats(
-          `${n} realization${n > 1 ? "s" : ""} · ${allResults[0].times.length} pts/path`,
-        );
+        setStats(`${allResults[0].times.length} pts/path`);
       } catch (event) {
         setError(event.message);
       } finally {
@@ -358,6 +355,10 @@ export default function CTMPInhomoSimulator() {
                 onInsertRowAfter={insertRow(setVarRows)}
                 onRemoveRow={removeRow(setVarRows)}
                 placeholder="Prey = 300"
+                showRowColor
+                colorForRow={(index) =>
+                  getSeriesColor(CTMP_INHOMO_SERIES_COLORS, index)
+                }
               />
             )}
 
@@ -489,7 +490,7 @@ export default function CTMPInhomoSimulator() {
           </div>
 
           {(error || warning) && (
-            <div className="p-3 border-t border-slate-300 space-y-2">
+            <div className="hidden md:block p-3 border-t border-slate-300 space-y-2">
               {error && (
                 <div className="text-xs text-red-700 bg-red-100 border border-red-200 px-2 py-1.5 rounded whitespace-pre-wrap">
                   {error}
@@ -515,52 +516,75 @@ export default function CTMPInhomoSimulator() {
             />
           </div>
 
-          <div className="bg-white border border-slate-300 px-3 py-2 flex flex-wrap items-center gap-2">
-            <label className="text-[11px] text-slate-500">t max</label>
-            <input
-              type="number"
-              value={tMax}
-              step="any"
-              onChange={(event) => setTMax(event.target.value)}
-              className="w-16 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
-            />
+          <div className="bg-white border border-slate-300 px-3 py-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="order-1 flex items-center gap-2 mr-1">
+                <button
+                  onClick={runSimulation}
+                  disabled={running}
+                  className="w-24 py-1.5 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-xs font-semibold text-white text-center"
+                >
+                  {running ? "Running..." : "Run"}
+                </button>
 
-            <label className="text-[11px] text-slate-500">dt</label>
-            <input
-              type="number"
-              value={dt}
-              step="0.0001"
-              onChange={(event) => setDt(event.target.value)}
-              className="w-24 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
-            />
+                <button
+                  onClick={() => loadPreset("seasonal")}
+                  className="w-20 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs"
+                >
+                  Reset
+                </button>
+              </div>
 
-            <label className="text-[11px] text-slate-500">runs</label>
-            <input
-              type="number"
-              value={numSims}
-              min="1"
-              max="200"
-              step="1"
-              onChange={(event) => setNumSims(event.target.value)}
-              className="w-16 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
-            />
+              <div className="order-2 flex items-center gap-2 flex-nowrap whitespace-nowrap max-w-full overflow-x-auto">
+                <label className="text-[11px] text-slate-500">t max</label>
+                <input
+                  type="number"
+                  value={tMax}
+                  step="any"
+                  onChange={(event) => setTMax(event.target.value)}
+                  className="w-16 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
+                />
 
-            <button
-              onClick={runSimulation}
-              disabled={running}
-              className="w-24 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-xs font-semibold text-white text-center"
-            >
-              {running ? "Running..." : "Run"}
-            </button>
+                <label className="text-[11px] text-slate-500">dt</label>
+                <input
+                  type="number"
+                  value={dt}
+                  step="0.0001"
+                  onChange={(event) => setDt(event.target.value)}
+                  className="w-24 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
+                />
 
-            <button
-              onClick={() => loadPreset("seasonal")}
-              className="w-20 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs"
-            >
-              Reset
-            </button>
+                <label className="text-[11px] text-slate-500">runs</label>
+                <input
+                  type="number"
+                  value={numSims}
+                  min="1"
+                  max="200"
+                  step="1"
+                  onChange={(event) => setNumSims(event.target.value)}
+                  className="w-16 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
+                />
+              </div>
 
-            {stats && <span className="ml-auto text-xs text-slate-500 font-mono">{stats}</span>}
+              {stats && (
+                <span className="order-3 md:order-3 md:ml-auto text-xs text-slate-500 font-mono">
+                  {stats}
+                </span>
+              )}
+            </div>
+
+            <div className="md:hidden mt-2 h-14 overflow-y-auto pr-1 space-y-2" aria-live="polite">
+              {error && (
+                <div className="text-xs text-red-700 bg-red-100 border border-red-200 px-2 py-1.5 rounded whitespace-pre-wrap">
+                  {error}
+                </div>
+              )}
+              {warning && (
+                <div className="text-xs text-amber-700 bg-amber-100 border border-amber-200 px-2 py-1.5 rounded whitespace-pre-wrap">
+                  {warning}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
