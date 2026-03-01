@@ -7,7 +7,7 @@ import { useState } from "react";
 const NAV_LINKS = [
   { href: "/", label: "Home" },
   { href: "/gillespie", label: "CTMC Gillespie" },
-  { href: "/ctmp-inhomo", label: "CTMP (Time-Dep.)" },
+  { href: "/ctmp-inhomo", label: "CTMP Time Var" },
   { href: "/sde", label: "SDE Solver" },
 ];
 
@@ -62,7 +62,11 @@ export default function Navbar() {
               stroke="currentColor"
               strokeWidth={2}
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           ) : (
             <svg
@@ -73,7 +77,11 @@ export default function Navbar() {
               stroke="currentColor"
               strokeWidth={2}
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M4 6h16M4 12h16M4 18h16"
+              />
             </svg>
           )}
         </button>
