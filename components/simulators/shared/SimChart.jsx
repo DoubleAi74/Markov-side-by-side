@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef } from "react";
 import {
   Chart,
   LinearScale,
@@ -10,7 +10,7 @@ import {
   Legend,
   Tooltip,
   Title,
-} from 'chart.js';
+} from "chart.js";
 
 Chart.register(
   LinearScale,
@@ -19,7 +19,7 @@ Chart.register(
   LineController,
   Legend,
   Tooltip,
-  Title
+  Title,
 );
 
 /**
@@ -33,12 +33,13 @@ Chart.register(
  *  - yLabel: string (default "Count")
  *  - xTickSignificantFigures: optional max significant figures for x ticks
  *  - xTickAutoSkip: optional boolean to enable/disable x tick auto-skip
+ *  - legendItems: optional pre-run legend items [{ label, color }]
  *  - stepped: boolean — use stepped 'after' lines (for CTMPs)
  */
 function gridColor(ctx) {
   const value = ctx.tick?.value;
-  if (value === 0) return 'rgba(15, 23, 42, 0.65)';
-  return 'rgba(15, 23, 42, 0.16)';
+  if (value === 0) return "rgba(15, 23, 42, 0.65)";
+  return "rgba(15, 23, 42, 0.16)";
 }
 
 function gridWidth(ctx) {
@@ -57,7 +58,10 @@ function formatAxisTick(value, xTickSignificantFigures) {
   }
 
   if (Number.isFinite(xTickSignificantFigures) && xTickSignificantFigures > 0) {
-    const sigFigs = Math.max(1, Math.min(21, Math.floor(xTickSignificantFigures)));
+    const sigFigs = Math.max(
+      1,
+      Math.min(21, Math.floor(xTickSignificantFigures)),
+    );
     return String(Number(numeric.toPrecision(sigFigs)));
   }
 
@@ -68,29 +72,34 @@ function formatAxisTick(value, xTickSignificantFigures) {
 export default function SimChart({
   datasets = [],
   xMax,
-  xLabel = 'Time',
-  yLabel = 'Count',
+  xLabel = "Time",
+  yLabel = "Count",
   xTickSignificantFigures,
   xTickAutoSkip = true,
+  legendItems = [],
   stepped = false,
-  showTooltips = true
+  showTooltips = true,
+  showLegend = true,
 }) {
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
 
   useEffect(() => {
-    const ctx = canvasRef.current.getContext('2d');
+    const ctx = canvasRef.current.getContext("2d");
 
     chartRef.current = new Chart(ctx, {
-      type: 'line',
+      type: "line",
       data: { datasets: [] },
       options: {
+        layout: {
+          padding: { right: 12 },
+        },
         responsive: true,
         maintainAspectRatio: false,
         animation: false,
         interaction: {
-          mode: 'nearest',
-          axis: 'xy',
+          mode: "nearest",
+          axis: "xy",
           intersect: false,
         },
         elements: {
@@ -99,7 +108,7 @@ export default function SimChart({
         },
         scales: {
           x: {
-            type: 'linear',
+            type: "linear",
             title: { display: true, text: xLabel },
             min: 0,
             grid: {
@@ -107,7 +116,7 @@ export default function SimChart({
               lineWidth: gridWidth,
             },
             ticks: {
-              color: '#334155',
+              color: "#334155",
               maxTicksLimit: 14,
               autoSkip: xTickAutoSkip,
             },
@@ -120,16 +129,30 @@ export default function SimChart({
               lineWidth: gridWidth,
             },
             ticks: {
-              color: '#334155',
+              color: "#334155",
               maxTicksLimit: 12,
             },
           },
         },
         plugins: {
           legend: {
-            display: false,
+            display: showLegend,
+            position: "top",
+            align: "end",
+            labels: {
+              // Keep one entry per variable type even when many realizations are plotted.
+              filter: (legendItem, data) => {
+                const text = String(legendItem.text ?? "").trim();
+                if (!text) return false;
+                return (
+                  data.datasets.findIndex(
+                    (dataset) => String(dataset.label ?? "").trim() === text,
+                  ) === legendItem.datasetIndex
+                );
+              },
+            },
           },
-          tooltip: { mode: 'nearest', axis: 'x', intersect: false },
+          tooltip: { mode: "nearest", axis: "x", intersect: false },
         },
       },
     });
@@ -143,12 +166,40 @@ export default function SimChart({
   // Update chart whenever datasets/options change
   useEffect(() => {
     if (!chartRef.current) return;
-    chartRef.current.data.datasets = datasets;
+    const hasSeriesData = datasets.some(
+      (dataset) => Array.isArray(dataset.data) && dataset.data.length > 0,
+    );
+    const hasLegendItems = Array.isArray(legendItems) && legendItems.length > 0;
+    const renderedDatasets =
+      !hasSeriesData && hasLegendItems
+        ? legendItems.map((item, index) => ({
+            label: item.label,
+            data: [],
+            borderColor: item.color,
+            backgroundColor: item.color,
+            pointRadius: 0,
+            borderWidth: 2,
+            // Keep legend visible before simulation without drawing placeholder lines.
+            showLine: false,
+            parsing: false,
+            order: -1000 + index,
+          }))
+        : datasets;
+    const hasLegendEntries = renderedDatasets.some(
+      (dataset) => String(dataset.label ?? "").trim().length > 0,
+    );
+
+    chartRef.current.data.datasets = renderedDatasets;
     chartRef.current.options.scales.x.title.text = xLabel;
     chartRef.current.options.scales.y.title.text = yLabel;
     chartRef.current.options.scales.x.ticks.callback = (value) =>
       formatAxisTick(value, xTickSignificantFigures);
     chartRef.current.options.scales.x.ticks.autoSkip = xTickAutoSkip;
+    chartRef.current.options.plugins.legend.display = showLegend;
+    chartRef.current.options.layout.padding = {
+      right: 10,
+      top: showLegend && !hasLegendEntries ? 18 : 0,
+    };
     if (xMax != null) {
       chartRef.current.options.scales.x.max = xMax;
     } else {
@@ -156,7 +207,17 @@ export default function SimChart({
     }
     chartRef.current.options.plugins.tooltip.enabled = showTooltips;
     chartRef.current.update();
-  }, [datasets, xMax, xLabel, yLabel, xTickSignificantFigures, xTickAutoSkip, showTooltips]);
+  }, [
+    datasets,
+    xMax,
+    xLabel,
+    yLabel,
+    xTickSignificantFigures,
+    xTickAutoSkip,
+    legendItems,
+    showLegend,
+    showTooltips,
+  ]);
 
   return (
     <div className="relative w-full h-full min-h-[280px] md:min-h-[400px]">

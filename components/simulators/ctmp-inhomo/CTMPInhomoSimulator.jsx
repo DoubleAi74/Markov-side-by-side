@@ -16,6 +16,7 @@ import {
   parseHelperLines,
   parseNameValueLines,
 } from "@/lib/modelParsers";
+import { X } from "lucide-react";
 
 const TAB_ITEMS = [
   { id: "vars", label: "Variables" },
@@ -58,6 +59,8 @@ function withTransitionIds(transitions, varCount) {
     deltas: Array.from({ length: varCount }, (_, idx) =>
       String(transition.deltas?.[idx] ?? 0),
     ),
+    noteEnabled: Boolean(transition.noteEnabled),
+    noteLabel: transition.noteLabel ?? "",
   }));
 }
 
@@ -77,6 +80,29 @@ function insertAfterRow(rows, afterId, newRow) {
   return [...rows.slice(0, idx + 1), newRow, ...rows.slice(idx + 1)];
 }
 
+function buildLegendLabel(variableName, noteEnabled, noteLabel) {
+  const name = String(variableName ?? "").trim();
+  const note = noteEnabled ? String(noteLabel ?? "").trim() : "";
+  if (!note) return name;
+  return `${note} : ${name}`;
+}
+
+function buildLegendLabelsFromRows(variableNames, rows) {
+  const rowByName = new Map();
+  rows.forEach((row) => {
+    const rowName = String(row?.text ?? "")
+      .split("=")[0]
+      ?.trim();
+    if (!rowName || rowByName.has(rowName)) return;
+    rowByName.set(rowName, row);
+  });
+
+  return variableNames.map((name) => {
+    const sourceRow = rowByName.get(name);
+    return buildLegendLabel(name, sourceRow?.noteEnabled, sourceRow?.noteLabel);
+  });
+}
+
 export default function CTMPInhomoSimulator() {
   const [activeTab, setActiveTab] = useState("vars");
   const [varRows, setVarRows] = useState(() =>
@@ -89,7 +115,10 @@ export default function CTMPInhomoSimulator() {
     textToRows(helpersToText(PRESETS.seasonal.helpers)),
   );
   const [transitions, setTransitions] = useState(() =>
-    withTransitionIds(PRESETS.seasonal.transitions, PRESETS.seasonal.vars.length),
+    withTransitionIds(
+      PRESETS.seasonal.transitions,
+      PRESETS.seasonal.vars.length,
+    ),
   );
 
   const [tMax, setTMax] = useState(PRESETS.seasonal.tMax);
@@ -114,8 +143,23 @@ export default function CTMPInhomoSimulator() {
     }
   }, [varsText]);
 
-  const updateRow = (setter) => (id, text) => {
-    setter((rows) => rows.map((row) => (row.id === id ? { ...row, text } : row)));
+  const legendItems = useMemo(
+    () =>
+      buildLegendLabelsFromRows(variableNamesPreview, varRows).map(
+        (label, index) => ({
+          label,
+          color: getSeriesColor(CTMP_INHOMO_SERIES_COLORS, index),
+        }),
+      ),
+    [varRows, variableNamesPreview],
+  );
+
+  const updateRow = (setter) => (id, text, patch) => {
+    setter((rows) =>
+      rows.map((row) =>
+        row.id === id ? { ...row, text, ...(patch ?? {}) } : row,
+      ),
+    );
   };
 
   const insertRow = (setter) => (afterId) => {
@@ -130,7 +174,9 @@ export default function CTMPInhomoSimulator() {
 
   const updateTransition = (id, field, value) => {
     setTransitions((items) =>
-      items.map((item) => (item.id === id ? { ...item, [field]: value } : item)),
+      items.map((item) =>
+        item.id === id ? { ...item, [field]: value } : item,
+      ),
     );
   };
 
@@ -141,6 +187,8 @@ export default function CTMPInhomoSimulator() {
         id: makeId(),
         rate: "",
         deltas: Array.from({ length: variableNamesPreview.length }, () => "0"),
+        noteEnabled: false,
+        noteLabel: "",
       },
     ]);
   };
@@ -153,10 +201,27 @@ export default function CTMPInhomoSimulator() {
         {
           id: makeId(),
           rate: "",
-          deltas: Array.from({ length: variableNamesPreview.length }, () => "0"),
+          deltas: Array.from(
+            { length: variableNamesPreview.length },
+            () => "0",
+          ),
+          noteEnabled: false,
+          noteLabel: "",
         },
       ];
     });
+  };
+
+  const toggleTransitionNote = (id) => {
+    setTransitions((items) =>
+      items.map((item) =>
+        item.id === id ? { ...item, noteEnabled: !item.noteEnabled } : item,
+      ),
+    );
+  };
+
+  const updateTransitionNoteLabel = (id, value) => {
+    updateTransition(id, "noteLabel", value);
   };
 
   const updateTransitionDelta = (id, idx, value) => {
@@ -204,6 +269,7 @@ export default function CTMPInhomoSimulator() {
         }
 
         const varNames = parsedVars.map((v) => v.name);
+        const varLegendLabels = buildLegendLabelsFromRows(varNames, varRows);
         const paramNames = parsedParams.map((p) => p.name);
         const initialState = parsedVars.map((v) => v.val);
 
@@ -293,14 +359,17 @@ export default function CTMPInhomoSimulator() {
         allResults.forEach((result, simIdx) => {
           const times = result.times.filter((_, idx) => idx % step === 0);
           const history = result.history.filter((_, idx) => idx % step === 0);
-          varNames.forEach((label, idx) => {
+          varNames.forEach((_, idx) => {
             const color = hexToRgba(
               getSeriesColor(CTMP_INHOMO_SERIES_COLORS, idx),
               alpha,
             );
             datasets.push({
-              label: simIdx === 0 ? label : "",
-              data: times.map((time, rowIdx) => ({ x: time, y: history[rowIdx][idx] })),
+              label: simIdx === 0 ? varLegendLabels[idx] : "",
+              data: times.map((time, rowIdx) => ({
+                x: time,
+                y: history[rowIdx][idx],
+              })),
               borderColor: color,
               backgroundColor: color,
               borderWidth: lineWidth,
@@ -319,7 +388,16 @@ export default function CTMPInhomoSimulator() {
         setRunning(false);
       }
     }, 50);
-  }, [dt, helpersText, numSims, paramsText, tMax, transitions, varsText]);
+  }, [
+    dt,
+    helpersText,
+    numSims,
+    paramsText,
+    tMax,
+    transitions,
+    varRows,
+    varsText,
+  ]);
 
   return (
     <div className="flex flex-col h-auto md:h-[calc(100vh-3.5rem)] bg-slate-300">
@@ -349,7 +427,7 @@ export default function CTMPInhomoSimulator() {
             {activeTab === "vars" && (
               <ExpressionListSection
                 title="Variables"
-                helperText='One line each: Name = initialValue'
+                helperText="One line each: Name = initial_value"
                 rows={varRows}
                 onUpdateRow={updateRow(setVarRows)}
                 onInsertRowAfter={insertRow(setVarRows)}
@@ -366,7 +444,7 @@ export default function CTMPInhomoSimulator() {
               <>
                 <ExpressionListSection
                   title="Parameters"
-                  helperText='One line each: name = value'
+                  helperText="One line each: Name = value"
                   rows={paramRows}
                   onUpdateRow={updateRow(setParamRows)}
                   onInsertRowAfter={insertRow(setParamRows)}
@@ -375,7 +453,7 @@ export default function CTMPInhomoSimulator() {
                 />
                 <ExpressionListSection
                   title="Time Functions"
-                  helperText='One line each: Name(t) = expression'
+                  helperText="One line each: Name(t) = expression"
                   rows={helperRows}
                   onUpdateRow={updateRow(setHelperRows)}
                   onInsertRowAfter={insertRow(setHelperRows)}
@@ -392,59 +470,124 @@ export default function CTMPInhomoSimulator() {
                     Transitions
                   </div>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Each transition has separate Rate and Change sub-rows.
+                    Define the rate and update rule for each transition.
                   </p>
                   {variableNamesPreview.length > 0 && (
                     <p className="text-[11px] text-slate-600 mt-1">
                       Order: {variableNamesPreview.join(", ")}
                     </p>
                   )}
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    Change inputs accept expressions (for example, <code>-X</code> for
-                    extinction of variable <code>X</code>).
-                  </p>
                 </div>
 
-                {transitions.map((transition, index) => (
+                {transitions.map((transition) => (
                   <div
                     key={transition.id}
                     className="grid grid-cols-[46px_1fr_36px] border-b border-slate-300 bg-slate-100"
                   >
                     <div className="flex items-start justify-center pt-2 text-xs text-slate-500 border-r border-slate-300">
-                      {index + 1}
+                      <button
+                        type="button"
+                        onClick={() => toggleTransitionNote(transition.id)}
+                        aria-label="Toggle transition label"
+                        aria-pressed={transition.noteEnabled}
+                        className={`rounded transition ${
+                          transition.noteEnabled
+                            ? "text-slate-700"
+                            : "text-slate-400 hover:text-slate-600"
+                        }`}
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          strokeWidth={1.5}
+                          stroke="currentColor"
+                          className="size-5"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"
+                          />
+                        </svg>
+                      </button>
                     </div>
 
-                    <div className="p-2.5 space-y-2">
-                      <div className="space-y-1">
-                        <label className="text-[11px] uppercase tracking-wide text-emerald-700 font-semibold">
-                          Rate
-                        </label>
+                    <div className="p-2.5 pb-1.5 w-full overflow-hidden flex flex-col">
+                      {transition.noteEnabled && (
+                        <div className="mb-[5px] flex justify-end">
+                          <input
+                            type="text"
+                            value={transition.noteLabel ?? ""}
+                            size={Math.max(
+                              transition.noteLabel?.length * 1.5 ?? 0,
+                              10,
+                            )}
+                            onChange={(event) =>
+                              updateTransitionNoteLabel(
+                                transition.id,
+                                event.target.value,
+                              )
+                            }
+                            spellCheck={false}
+                            className="
+                              max-w-full
+                              px-1 py-0
+                              text-[14px]
+                              text-slate-600
+                              border-none
+                              focus:outline-none
+                              placeholder:text-[13px]
+                              placeholder:text-slate-300
+                              placeholder:bg-white/70
+                              placeholder:italic
+                              text-right
+                              font-semibold
+                              bg-transparent
+                            "
+                            placeholder="Add Label "
+                          />
+                        </div>
+                      )}
+
+                      <div className="relative w-full mb-[2px]">
                         <input
                           type="text"
                           value={transition.rate}
                           onChange={(event) =>
-                            updateTransition(transition.id, "rate", event.target.value)
+                            updateTransition(
+                              transition.id,
+                              "rate",
+                              event.target.value,
+                            )
                           }
                           spellCheck={false}
-                          className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-sm code-input bg-white"
+                          className="w-full pl-2.5 pr-14 py-1.5 border border-slate-300 rounded text-sm bg-white"
                           placeholder="birth * Season(t) * Prey"
                         />
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] uppercase tracking-wide text-emerald-900/70 font-semibold pointer-events-none">
+                          Rate
+                        </span>
                       </div>
 
-                      <div className="space-y-1">
-                        <label className="text-[11px] uppercase tracking-wide text-orange-700 font-semibold">
-                          Change
+                      <div className="relative w-full flex items-center justify-end gap-3">
+                        {/* Label placed directly inside the flex container */}
+                        <label className="shrink-0 text-[10px] leading-none tracking-wide text-slate-500 font-semibold ">
+                          CHANGES:
                         </label>
+
+                        {/* Inputs / Empty State Container */}
                         {variableNamesPreview.length === 0 ? (
                           <div className="text-[11px] text-slate-500 px-2 py-1.5 bg-white border border-slate-300 rounded">
-                            Define valid variable lines to enable change boxes.
+                            Add variables to define changes
                           </div>
                         ) : (
-                          <div className="flex flex-wrap gap-2">
+                          <div className="flex items-center gap-2 flex-nowrap overflow-x-auto pb-0.5">
                             {variableNamesPreview.map((varName, varIdx) => (
                               <div
                                 key={`${transition.id}-${varName}`}
-                                className="bg-white border border-slate-300 rounded px-1 py-0.5"
+                                /* Changed w-[72px] to w-[56px] (or you can use standard w-14) */
+                                className="w-[56px] shrink-0"
                               >
                                 <input
                                   type="text"
@@ -457,8 +600,18 @@ export default function CTMPInhomoSimulator() {
                                     )
                                   }
                                   title={varName}
-                                  className="w-14 text-xs bg-transparent outline-none code-input text-slate-800"
+                                  /* Added font-semibold and text-center. (Changed px-2 to px-1 to give the text more room in the narrower box) */
+                                  className="w-full px-1 py-1 border border-slate-300 rounded-t text-xs font-semibold text-center bg-white code-input focus:outline-none focus:ring-0 focus:border-slate-300 placeholder:text-slate-200"
                                   placeholder="0"
+                                />
+                                <div
+                                  className="mt-0 h-1 rounded-b-sm"
+                                  style={{
+                                    backgroundColor: getSeriesColor(
+                                      CTMP_INHOMO_SERIES_COLORS,
+                                      varIdx,
+                                    ),
+                                  }}
                                 />
                               </div>
                             ))}
@@ -470,10 +623,10 @@ export default function CTMPInhomoSimulator() {
                     <button
                       type="button"
                       onClick={() => removeTransition(transition.id)}
-                      className="text-slate-400 hover:text-red-500 border-l border-slate-300 text-sm"
+                      className="text-slate-400 hover:text-red-500 border-l border-slate-300 text-sm justify-center items-center flex "
                       aria-label="Delete transition"
                     >
-                      x
+                      <X className="h-4 w-4" />
                     </button>
                   </div>
                 ))}
@@ -509,6 +662,7 @@ export default function CTMPInhomoSimulator() {
           <div className="flex-1 min-h-0 border border-slate-300 bg-white">
             <SimChart
               datasets={chartDatasets}
+              legendItems={legendItems}
               xMax={chartXMax}
               xLabel="Time"
               yLabel="Count"
@@ -573,7 +727,10 @@ export default function CTMPInhomoSimulator() {
               )}
             </div>
 
-            <div className="md:hidden mt-2 h-14 overflow-y-auto pr-1 space-y-2" aria-live="polite">
+            <div
+              className="md:hidden mt-2 h-14 overflow-y-auto pr-1 space-y-2"
+              aria-live="polite"
+            >
               {error && (
                 <div className="text-xs text-red-700 bg-red-100 border border-red-200 px-2 py-1.5 rounded whitespace-pre-wrap">
                   {error}
