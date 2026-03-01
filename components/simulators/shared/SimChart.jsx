@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Chart,
   LinearScale,
@@ -83,6 +83,24 @@ export default function SimChart({
 }) {
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
+  const [isMobileView, setIsMobileView] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mediaQuery = window.matchMedia("(max-width: 767px)");
+    const applyMatch = (event) => {
+      const nextMatch = event?.matches ?? mediaQuery.matches;
+      setIsMobileView(nextMatch);
+    };
+
+    applyMatch();
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", applyMatch);
+      return () => mediaQuery.removeEventListener("change", applyMatch);
+    }
+    mediaQuery.addListener(applyMatch);
+    return () => mediaQuery.removeListener(applyMatch);
+  }, []);
 
   useEffect(() => {
     const ctx = canvasRef.current.getContext("2d");
@@ -166,6 +184,7 @@ export default function SimChart({
   // Update chart whenever datasets/options change
   useEffect(() => {
     if (!chartRef.current) return;
+    const tooltipsEnabled = showTooltips && !isMobileView;
     const hasSeriesData = datasets.some(
       (dataset) => Array.isArray(dataset.data) && dataset.data.length > 0,
     );
@@ -205,7 +224,7 @@ export default function SimChart({
     } else {
       delete chartRef.current.options.scales.x.max;
     }
-    chartRef.current.options.plugins.tooltip.enabled = showTooltips;
+    chartRef.current.options.plugins.tooltip.enabled = tooltipsEnabled;
     chartRef.current.update();
   }, [
     datasets,
@@ -217,6 +236,7 @@ export default function SimChart({
     legendItems,
     showLegend,
     showTooltips,
+    isMobileView,
   ]);
 
   return (
