@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { signOut } from "next-auth/react";
 
 const NAV_LINKS = [
   { href: "/", label: "Home" },
@@ -11,9 +12,20 @@ const NAV_LINKS = [
   { href: "/sde", label: "SDE Solver" },
 ];
 
-export default function Navbar() {
+export default function Navbar({ sessionUser = null }) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    try {
+      await signOut({ redirectTo: "/", redirect: true });
+    } finally {
+      setSigningOut(false);
+      setMenuOpen(false);
+    }
+  };
 
   return (
     <nav className="sticky top-0 z-50 h-14 bg-slate-900 text-white shadow-md relative">
@@ -43,6 +55,40 @@ export default function Navbar() {
               </Link>
             );
           })}
+
+          {sessionUser ? (
+            <>
+              <Link
+                href="/dashboard"
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition whitespace-nowrap ${
+                  pathname === "/dashboard"
+                    ? "bg-indigo-600 text-white"
+                    : "text-slate-300 hover:bg-slate-700 hover:text-white"
+                }`}
+              >
+                Dashboard
+              </Link>
+              <button
+                type="button"
+                onClick={handleSignOut}
+                disabled={signingOut}
+                className="px-3 py-1.5 rounded-md text-sm font-medium text-slate-300 hover:bg-slate-700 hover:text-white transition whitespace-nowrap disabled:opacity-60"
+              >
+                {signingOut ? "Logging Out..." : "Logout"}
+              </button>
+            </>
+          ) : (
+            <Link
+              href="/login"
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition whitespace-nowrap ${
+                pathname === "/login"
+                  ? "bg-indigo-600 text-white"
+                  : "text-slate-300 hover:bg-slate-700 hover:text-white"
+              }`}
+            >
+              Login
+            </Link>
+          )}
         </div>
 
         <button
@@ -109,6 +155,42 @@ export default function Navbar() {
               </Link>
             );
           })}
+
+          {sessionUser ? (
+            <>
+              <Link
+                href="/dashboard"
+                onClick={() => setMenuOpen(false)}
+                className={`block px-4 py-3 text-sm font-medium border-b border-slate-700 transition ${
+                  pathname === "/dashboard"
+                    ? "bg-indigo-600 text-white"
+                    : "text-slate-300 hover:bg-slate-700 hover:text-white"
+                }`}
+              >
+                Dashboard
+              </Link>
+              <button
+                type="button"
+                onClick={handleSignOut}
+                disabled={signingOut}
+                className="block w-full px-4 py-3 text-left text-sm font-medium text-slate-300 hover:bg-slate-700 hover:text-white transition disabled:opacity-60"
+              >
+                {signingOut ? "Logging Out..." : "Logout"}
+              </button>
+            </>
+          ) : (
+            <Link
+              href="/login"
+              onClick={() => setMenuOpen(false)}
+              className={`block px-4 py-3 text-sm font-medium border-b border-slate-700 last:border-b-0 transition ${
+                pathname === "/login"
+                  ? "bg-indigo-600 text-white"
+                  : "text-slate-300 hover:bg-slate-700 hover:text-white"
+              }`}
+            >
+              Login
+            </Link>
+          )}
         </div>
       )}
     </nav>

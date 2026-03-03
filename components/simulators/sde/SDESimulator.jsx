@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import SimChart from "../shared/SimChart";
 import ExpressionListSection from "../shared/ExpressionListSection";
+import SaveModelControls from "../shared/SaveModelControls";
 import {
   SDE_SERIES_COLORS,
   getSeriesColor,
@@ -11,6 +12,10 @@ import {
 import { SDEComponent, TimeStepperSDE } from "./engine";
 import { compileExpression } from "@/lib/compile";
 import { assignmentsToText, parseNameValueLines } from "@/lib/modelParsers";
+import {
+  hydrateSDEPayload,
+  serializeSDEState,
+} from "@/lib/saved-simulations/serializers";
 import { X } from "lucide-react";
 
 const TAB_ITEMS = [
@@ -129,23 +134,46 @@ function buildLegendLabel(variableName, noteEnabled, noteLabel) {
   return `${note}: ${name}`;
 }
 
-export default function SDESimulator() {
+export default function SDESimulator({
+  sessionUser = null,
+  initialSavedSimulation = null,
+}) {
+  const initialSavedPayload = useMemo(
+    () =>
+      initialSavedSimulation
+        ? hydrateSDEPayload(initialSavedSimulation.payload)
+        : null,
+    [initialSavedSimulation],
+  );
   const [activeTab, setActiveTab] = useState("vars");
   const [paramRows, setParamRows] = useState(() =>
+    initialSavedPayload?.paramRows ??
     textToRows(assignmentsToText(DEFAULT_PRESET.params)),
   );
   const [components, setComponents] = useState(() =>
-    withComponentIds(DEFAULT_PRESET.components),
+    initialSavedPayload?.components ?? withComponentIds(DEFAULT_PRESET.components),
   );
 
-  const [tMax, setTMax] = useState(DEFAULT_PRESET.tMax);
-  const [dt, setDt] = useState(DEFAULT_PRESET.dt);
-  const [numSims, setNumSims] = useState(DEFAULT_PRESET.numSims);
+  const [tMax, setTMax] = useState(
+    initialSavedPayload?.settings?.tMax ?? DEFAULT_PRESET.tMax,
+  );
+  const [dt, setDt] = useState(
+    initialSavedPayload?.settings?.dt ?? DEFAULT_PRESET.dt,
+  );
+  const [numSims, setNumSims] = useState(
+    initialSavedPayload?.settings?.numSims ?? DEFAULT_PRESET.numSims,
+  );
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
   const [stats, setStats] = useState("");
   const [chartDatasets, setChartDatasets] = useState([]);
   const [chartXMax, setChartXMax] = useState(undefined);
+  const [savedSimulationId, setSavedSimulationId] = useState(
+    initialSavedSimulation?.id ?? null,
+  );
+  const [modelName, setModelName] = useState(
+    initialSavedSimulation?.name ?? "",
+  );
 
   const paramsText = rowsToText(paramRows);
 
@@ -265,6 +293,41 @@ export default function SDESimulator() {
     setChartDatasets([]);
     setChartXMax(undefined);
   };
+
+  const applySavedSimulation = useCallback((savedSimulation) => {
+    if (!savedSimulation) return;
+
+    const hydrated = hydrateSDEPayload(savedSimulation.payload);
+    setParamRows(hydrated.paramRows);
+    setComponents(hydrated.components);
+    setTMax(hydrated.settings.tMax);
+    setDt(hydrated.settings.dt);
+    setNumSims(hydrated.settings.numSims);
+    setSavedSimulationId(savedSimulation.id);
+    setModelName(savedSimulation.name ?? "");
+    setError("");
+    setStats("");
+    setChartDatasets([]);
+    setChartXMax(undefined);
+  }, []);
+
+  useEffect(() => {
+    if (initialSavedSimulation) {
+      applySavedSimulation(initialSavedSimulation);
+    }
+  }, [applySavedSimulation, initialSavedSimulation]);
+
+  const buildSavePayload = useCallback(
+    () =>
+      serializeSDEState({
+        paramRows,
+        components,
+        tMax,
+        dt,
+        numSims,
+      }),
+    [components, dt, numSims, paramRows, tMax],
+  );
 
   const runSimulation = useCallback(() => {
     setError("");
@@ -649,60 +712,75 @@ export default function SDESimulator() {
             />
           </div>
 
-          <div className="bg-white border border-slate-300 px-3 py-2 flex flex-wrap items-center gap-2">
-            <div className="order-1 flex items-center gap-2 mr-1">
-              <button
-                onClick={runSimulation}
-                disabled={running}
-                className="w-24 py-1.5 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-xs font-semibold text-white text-center"
-              >
-                {running ? "Running..." : "Run"}
-              </button>
+          <div className="bg-white border border-slate-300">
+            <div className="px-3 py-2 flex flex-wrap items-center gap-2">
+              <div className="order-1 flex items-center gap-2 mr-1">
+                <button
+                  onClick={runSimulation}
+                  disabled={running}
+                  className="w-24 py-1.5 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-xs font-semibold text-white text-center"
+                >
+                  {running ? "Running..." : "Run"}
+                </button>
 
-              <button
-                onClick={loadPreset}
-                className="w-20 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs"
-              >
-                Reset
-              </button>
+                <button
+                  onClick={loadPreset}
+                  className="w-20 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs"
+                >
+                  Reset
+                </button>
+              </div>
+
+              <div className="order-2 flex items-center gap-2 flex-nowrap whitespace-nowrap max-w-full overflow-x-auto">
+                <label className="text-[11px] text-slate-500">t max</label>
+                <input
+                  type="number"
+                  value={tMax}
+                  step="any"
+                  onChange={(event) => setTMax(event.target.value)}
+                  className="w-16 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
+                />
+
+                <label className="text-[11px] text-slate-500">dt</label>
+                <input
+                  type="number"
+                  value={dt}
+                  step="0.001"
+                  onChange={(event) => setDt(event.target.value)}
+                  className="w-20 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
+                />
+
+                <label className="text-[11px] text-slate-500">runs</label>
+                <input
+                  type="number"
+                  value={numSims}
+                  min="1"
+                  max="200"
+                  step="1"
+                  onChange={(event) => setNumSims(event.target.value)}
+                  className="w-16 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
+                />
+              </div>
+
+              {stats && (
+                <span className="order-3 md:order-3 md:ml-auto text-xs text-slate-500 font-mono">
+                  {stats}
+                </span>
+              )}
             </div>
 
-            <div className="order-2 flex items-center gap-2 flex-nowrap whitespace-nowrap max-w-full overflow-x-auto">
-              <label className="text-[11px] text-slate-500">t max</label>
-              <input
-                type="number"
-                value={tMax}
-                step="any"
-                onChange={(event) => setTMax(event.target.value)}
-                className="w-16 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
-              />
-
-              <label className="text-[11px] text-slate-500">dt</label>
-              <input
-                type="number"
-                value={dt}
-                step="0.001"
-                onChange={(event) => setDt(event.target.value)}
-                className="w-20 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
-              />
-
-              <label className="text-[11px] text-slate-500">runs</label>
-              <input
-                type="number"
-                value={numSims}
-                min="1"
-                max="200"
-                step="1"
-                onChange={(event) => setNumSims(event.target.value)}
-                className="w-16 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
-              />
-            </div>
-
-            {stats && (
-              <span className="order-3 md:order-3 md:ml-auto text-xs text-slate-500 font-mono">
-                {stats}
-              </span>
-            )}
+            <SaveModelControls
+              sessionUser={sessionUser}
+              simulatorType="sde"
+              modelName={modelName}
+              onModelNameChange={setModelName}
+              savedSimulationId={savedSimulationId}
+              getPayload={buildSavePayload}
+              onSaved={(savedSimulation) => {
+                setSavedSimulationId(savedSimulation.id);
+                setModelName(savedSimulation.name);
+              }}
+            />
           </div>
         </div>
       </div>

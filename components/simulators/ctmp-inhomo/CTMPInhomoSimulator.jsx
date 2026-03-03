@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import SimChart from "../shared/SimChart";
 import ExpressionListSection from "../shared/ExpressionListSection";
+import SaveModelControls from "../shared/SaveModelControls";
 import {
   CTMP_INHOMO_SERIES_COLORS,
   getSeriesColor,
@@ -16,6 +17,10 @@ import {
   parseHelperLines,
   parseNameValueLines,
 } from "@/lib/modelParsers";
+import {
+  hydrateCTMPInhomoPayload,
+  serializeCTMPInhomoState,
+} from "@/lib/saved-simulations/serializers";
 import { X } from "lucide-react";
 
 const TAB_ITEMS = [
@@ -103,33 +108,59 @@ function buildLegendLabelsFromRows(variableNames, rows) {
   });
 }
 
-export default function CTMPInhomoSimulator() {
+export default function CTMPInhomoSimulator({
+  sessionUser = null,
+  initialSavedSimulation = null,
+}) {
+  const initialSavedPayload = useMemo(
+    () =>
+      initialSavedSimulation
+        ? hydrateCTMPInhomoPayload(initialSavedSimulation.payload)
+        : null,
+    [initialSavedSimulation],
+  );
   const [activeTab, setActiveTab] = useState("vars");
   const [varRows, setVarRows] = useState(() =>
+    initialSavedPayload?.varRows ??
     textToRows(assignmentsToText(PRESETS.seasonal.vars)),
   );
   const [paramRows, setParamRows] = useState(() =>
+    initialSavedPayload?.paramRows ??
     textToRows(assignmentsToText(PRESETS.seasonal.params)),
   );
   const [helperRows, setHelperRows] = useState(() =>
+    initialSavedPayload?.helperRows ??
     textToRows(helpersToText(PRESETS.seasonal.helpers)),
   );
   const [transitions, setTransitions] = useState(() =>
+    initialSavedPayload?.transitions ??
     withTransitionIds(
       PRESETS.seasonal.transitions,
       PRESETS.seasonal.vars.length,
     ),
   );
 
-  const [tMax, setTMax] = useState(PRESETS.seasonal.tMax);
-  const [dt, setDt] = useState(PRESETS.seasonal.dt);
-  const [numSims, setNumSims] = useState(1);
+  const [tMax, setTMax] = useState(
+    initialSavedPayload?.settings?.tMax ?? PRESETS.seasonal.tMax,
+  );
+  const [dt, setDt] = useState(
+    initialSavedPayload?.settings?.dt ?? PRESETS.seasonal.dt,
+  );
+  const [numSims, setNumSims] = useState(
+    initialSavedPayload?.settings?.numSims ?? 1,
+  );
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
   const [warning, setWarning] = useState("");
   const [stats, setStats] = useState("");
   const [chartDatasets, setChartDatasets] = useState([]);
   const [chartXMax, setChartXMax] = useState(undefined);
+  const [savedSimulationId, setSavedSimulationId] = useState(
+    initialSavedSimulation?.id ?? null,
+  );
+  const [modelName, setModelName] = useState(
+    initialSavedSimulation?.name ?? "",
+  );
 
   const varsText = useMemo(() => rowsToText(varRows), [varRows]);
   const paramsText = useMemo(() => rowsToText(paramRows), [paramRows]);
@@ -246,12 +277,53 @@ export default function CTMPInhomoSimulator() {
     setTransitions(withTransitionIds(preset.transitions, preset.vars.length));
     setTMax(preset.tMax);
     setDt(preset.dt);
+    setNumSims(1);
     setError("");
     setWarning("");
     setStats("");
     setChartDatasets([]);
     setChartXMax(undefined);
   };
+
+  const applySavedSimulation = useCallback((savedSimulation) => {
+    if (!savedSimulation) return;
+
+    const hydrated = hydrateCTMPInhomoPayload(savedSimulation.payload);
+    setVarRows(hydrated.varRows);
+    setParamRows(hydrated.paramRows);
+    setHelperRows(hydrated.helperRows);
+    setTransitions(hydrated.transitions);
+    setTMax(hydrated.settings.tMax);
+    setDt(hydrated.settings.dt);
+    setNumSims(hydrated.settings.numSims);
+    setSavedSimulationId(savedSimulation.id);
+    setModelName(savedSimulation.name ?? "");
+    setError("");
+    setWarning("");
+    setStats("");
+    setChartDatasets([]);
+    setChartXMax(undefined);
+  }, []);
+
+  useEffect(() => {
+    if (initialSavedSimulation) {
+      applySavedSimulation(initialSavedSimulation);
+    }
+  }, [applySavedSimulation, initialSavedSimulation]);
+
+  const buildSavePayload = useCallback(
+    () =>
+      serializeCTMPInhomoState({
+        varRows,
+        paramRows,
+        helperRows,
+        transitions,
+        tMax,
+        dt,
+        numSims,
+      }),
+    [dt, helperRows, numSims, paramRows, tMax, transitions, varRows],
+  );
 
   const runSimulation = useCallback(() => {
     setError("");
@@ -673,78 +745,93 @@ export default function CTMPInhomoSimulator() {
             />
           </div>
 
-          <div className="bg-white border border-slate-300 px-3 py-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="order-1 flex items-center gap-2 mr-1">
-                <button
-                  onClick={runSimulation}
-                  disabled={running}
-                  className="w-24 py-1.5 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-xs font-semibold text-white text-center"
-                >
-                  {running ? "Running..." : "Run"}
-                </button>
+          <div className="bg-white border border-slate-300">
+            <div className="px-3 py-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="order-1 flex items-center gap-2 mr-1">
+                  <button
+                    onClick={runSimulation}
+                    disabled={running}
+                    className="w-24 py-1.5 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-xs font-semibold text-white text-center"
+                  >
+                    {running ? "Running..." : "Run"}
+                  </button>
 
-                <button
-                  onClick={() => loadPreset("seasonal")}
-                  className="w-20 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs"
-                >
-                  Reset
-                </button>
+                  <button
+                    onClick={() => loadPreset("seasonal")}
+                    className="w-20 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs"
+                  >
+                    Reset
+                  </button>
+                </div>
+
+                <div className="order-2 flex items-center gap-2 flex-nowrap whitespace-nowrap max-w-full overflow-x-auto">
+                  <label className="text-[11px] text-slate-500">t max</label>
+                  <input
+                    type="number"
+                    value={tMax}
+                    step="any"
+                    onChange={(event) => setTMax(event.target.value)}
+                    className="w-16 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
+                  />
+
+                  <label className="text-[11px] text-slate-500">dt</label>
+                  <input
+                    type="number"
+                    value={dt}
+                    step="0.0001"
+                    onChange={(event) => setDt(event.target.value)}
+                    className="w-24 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
+                  />
+
+                  <label className="text-[11px] text-slate-500">runs</label>
+                  <input
+                    type="number"
+                    value={numSims}
+                    min="1"
+                    max="200"
+                    step="1"
+                    onChange={(event) => setNumSims(event.target.value)}
+                    className="w-16 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
+                  />
+                </div>
+
+                {stats && (
+                  <span className="order-3 md:order-3 md:ml-auto text-xs text-slate-500 font-mono">
+                    {stats}
+                  </span>
+                )}
               </div>
 
-              <div className="order-2 flex items-center gap-2 flex-nowrap whitespace-nowrap max-w-full overflow-x-auto">
-                <label className="text-[11px] text-slate-500">t max</label>
-                <input
-                  type="number"
-                  value={tMax}
-                  step="any"
-                  onChange={(event) => setTMax(event.target.value)}
-                  className="w-16 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
-                />
-
-                <label className="text-[11px] text-slate-500">dt</label>
-                <input
-                  type="number"
-                  value={dt}
-                  step="0.0001"
-                  onChange={(event) => setDt(event.target.value)}
-                  className="w-24 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
-                />
-
-                <label className="text-[11px] text-slate-500">runs</label>
-                <input
-                  type="number"
-                  value={numSims}
-                  min="1"
-                  max="200"
-                  step="1"
-                  onChange={(event) => setNumSims(event.target.value)}
-                  className="w-16 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
-                />
+              <div
+                className="md:hidden mt-2 h-14 overflow-y-auto pr-1 space-y-2"
+                aria-live="polite"
+              >
+                {error && (
+                  <div className="text-xs text-red-700 bg-red-100 border border-red-200 px-2 py-1.5 rounded whitespace-pre-wrap">
+                    {error}
+                  </div>
+                )}
+                {warning && (
+                  <div className="text-xs text-amber-700 bg-amber-100 border border-amber-200 px-2 py-1.5 rounded whitespace-pre-wrap">
+                    {warning}
+                  </div>
+                )}
               </div>
-
-              {stats && (
-                <span className="order-3 md:order-3 md:ml-auto text-xs text-slate-500 font-mono">
-                  {stats}
-                </span>
-              )}
             </div>
 
-            <div
-              className="md:hidden mt-2 h-14 overflow-y-auto pr-1 space-y-2"
-              aria-live="polite"
-            >
-              {error && (
-                <div className="text-xs text-red-700 bg-red-100 border border-red-200 px-2 py-1.5 rounded whitespace-pre-wrap">
-                  {error}
-                </div>
-              )}
-              {warning && (
-                <div className="text-xs text-amber-700 bg-amber-100 border border-amber-200 px-2 py-1.5 rounded whitespace-pre-wrap">
-                  {warning}
-                </div>
-              )}
-            </div>
+            <SaveModelControls
+              sessionUser={sessionUser}
+              simulatorType="ctmp-inhomo"
+              modelName={modelName}
+              onModelNameChange={setModelName}
+              savedSimulationId={savedSimulationId}
+              getPayload={buildSavePayload}
+              onSaved={(savedSimulation) => {
+                setSavedSimulationId(savedSimulation.id);
+                setModelName(savedSimulation.name);
+              }}
+            />
           </div>
         </div>
       </div>

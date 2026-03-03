@@ -1,7 +1,40 @@
-'use client';
+import { notFound, redirect } from "next/navigation";
+import { auth } from "@/auth";
+import CTMPInhomoSimulator from "@/components/simulators/ctmp-inhomo/CTMPInhomoSimulator";
+import { getSavedSimulationForUser } from "@/lib/saved-simulations/service";
 
-import CTMPInhomoSimulator from '@/components/simulators/ctmp-inhomo/CTMPInhomoSimulator';
+export default async function CTMPInhomoPage({ searchParams }) {
+  const session = await auth();
+  const params = await searchParams;
+  const modelId = typeof params?.model === "string" ? params.model : null;
+  let initialSavedSimulation = null;
 
-export default function CTMPInhomoPage() {
-  return <CTMPInhomoSimulator />;
+  if (modelId) {
+    if (!session?.user?.id) {
+      redirect(`/login?callbackUrl=${encodeURIComponent(`/ctmp-inhomo?model=${modelId}`)}`);
+    }
+
+    initialSavedSimulation = await getSavedSimulationForUser(modelId, session.user.id);
+    if (
+      !initialSavedSimulation ||
+      initialSavedSimulation.simulatorType !== "ctmp-inhomo"
+    ) {
+      notFound();
+    }
+  }
+
+  const sessionUser = session?.user?.id
+    ? {
+        id: session.user.id,
+        email: session.user.email ?? "",
+        name: session.user.name ?? "",
+      }
+    : null;
+
+  return (
+    <CTMPInhomoSimulator
+      sessionUser={sessionUser}
+      initialSavedSimulation={initialSavedSimulation}
+    />
+  );
 }

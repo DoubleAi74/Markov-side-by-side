@@ -3,6 +3,7 @@ import { config } from "@fortawesome/fontawesome-svg-core";
 import "@fortawesome/fontawesome-svg-core/styles.css";
 config.autoAddCss = false;
 import Navbar from "@/components/Navbar";
+import { auth } from "@/auth";
 
 export const metadata = {
   title: "Markov Side-by-Side",
@@ -34,11 +35,20 @@ export const metadata = {
   },
 };
 
-export default function RootLayout({ children }) {
+export default async function RootLayout({ children }) {
+  const session = await auth();
+  const sessionUser = session?.user?.id
+    ? {
+        id: session.user.id,
+        email: session.user.email ?? "",
+        name: session.user.name ?? "",
+      }
+    : null;
+
   return (
     <html lang="en">
       <body className="bg-slate-50 text-slate-800 antialiased">
-        <Navbar />
+        <Navbar sessionUser={sessionUser} />
         <main>{children}</main>
       </body>
     </html>
