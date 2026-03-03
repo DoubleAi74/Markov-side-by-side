@@ -339,7 +339,10 @@ export default function GillespieSimulator() {
         const totalRawPts =
           allResults.reduce((sum, result) => sum + result.times.length, 0) *
           varNames.length;
-        const step = totalRawPts > 15000 ? Math.ceil(totalRawPts / 15000) : 1;
+
+        const step = 1;
+        //FOR REDUCED PLOTTING RESOLUTION
+        // const step = totalRawPts > 15000 ? Math.ceil(totalRawPts / 15000) : 1;
 
         const datasets = [];
         allResults.forEach((result, simIdx) => {

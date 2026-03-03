@@ -338,10 +338,13 @@ export default function SDESimulator() {
         }
 
         const pointsPerRun = allResults[0].times.length;
-        const step =
-          pointsPerRun * n * varNames.length > 15000
-            ? Math.ceil((pointsPerRun * n * varNames.length) / 15000)
-            : 1;
+        const step = 1;
+
+        //FOR REDUCED PLOTTING RESOLUTION
+        // const step =
+        //   pointsPerRun * n * varNames.length > 15000
+        //     ? Math.ceil((pointsPerRun * n * varNames.length) / 15000)
+        //     : 1;
 
         const datasets = [];
         allResults.forEach((result, simIdx) => {
