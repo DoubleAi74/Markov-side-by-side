@@ -325,6 +325,18 @@ export default function CTMPInhomoSimulator({
     [dt, helperRows, numSims, paramRows, tMax, transitions, varRows],
   );
 
+  const buildPreviewChart = useCallback(
+    () => ({
+      datasets: chartDatasets,
+      legendItems,
+      xMax: chartXMax,
+      xLabel: "Time",
+      yLabel: "Count",
+      showLegend: true,
+    }),
+    [chartDatasets, chartXMax, legendItems],
+  );
+
   const runSimulation = useCallback(() => {
     setError("");
     setWarning("");
@@ -827,6 +839,7 @@ export default function CTMPInhomoSimulator({
               onModelNameChange={setModelName}
               savedSimulationId={savedSimulationId}
               getPayload={buildSavePayload}
+              getPreviewChart={buildPreviewChart}
               onSaved={(savedSimulation) => {
                 setSavedSimulationId(savedSimulation.id);
                 setModelName(savedSimulation.name);

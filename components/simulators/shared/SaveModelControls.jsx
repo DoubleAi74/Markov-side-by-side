@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { usePreviewUploadQueue } from "@/components/providers/PreviewUploadProvider";
 
 function buildCallbackPath(pathname, searchParams) {
   const query = searchParams.toString();
@@ -16,14 +17,24 @@ export default function SaveModelControls({
   onModelNameChange,
   savedSimulationId,
   getPayload,
+  getPreviewChart,
   onSaved,
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const mountedRef = useRef(true);
   const [pendingAction, setPendingAction] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const { enqueuePreviewUpload } = usePreviewUploadQueue();
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const callbackPath = buildCallbackPath(pathname, searchParams);
   const loginHref = `/login?callbackUrl=${encodeURIComponent(callbackPath)}`;
@@ -49,8 +60,10 @@ export default function SaveModelControls({
 
     try {
       const serialized = getPayload();
-      const isUpdate = mode === "update" && savedSimulationId;
-      const body = isUpdate
+      const isCreate = mode === "create";
+      const isUpdateRequest = !isCreate && savedSimulationId;
+      const shouldUploadPreview = mode === "create" || mode === "image";
+      const body = isUpdateRequest
         ? {
             name: trimmedName,
             payloadVersion: serialized.payloadVersion,
@@ -65,11 +78,11 @@ export default function SaveModelControls({
           };
 
       const response = await fetch(
-        isUpdate
+        isUpdateRequest
           ? `/api/saved-simulations/${savedSimulationId}`
           : "/api/saved-simulations",
         {
-          method: isUpdate ? "PATCH" : "POST",
+          method: isUpdateRequest ? "PATCH" : "POST",
           headers: {
             "Content-Type": "application/json",
           },
@@ -83,13 +96,33 @@ export default function SaveModelControls({
       }
 
       const saved = await response.json();
+      const previewChart = shouldUploadPreview ? getPreviewChart?.() : null;
+      if (previewChart) {
+        enqueuePreviewUpload({
+          savedSimulationId: saved.id,
+          chart: previewChart,
+        });
+      }
+
       onSaved?.(saved);
-      updateBrowserUrl(saved.id);
-      setSuccess(mode === "update" ? "Saved changes." : "Saved new model.");
+      if (mountedRef.current) {
+        updateBrowserUrl(saved.id);
+        setSuccess(
+          mode === "create"
+            ? "Saved new model. Preview uploading in background."
+            : mode === "image"
+              ? "Saved changes. Preview uploading in background."
+              : "Saved changes.",
+        );
+      }
     } catch (saveError) {
-      setError(saveError.message || "Failed to save simulation.");
+      if (mountedRef.current) {
+        setError(saveError.message || "Failed to save simulation.");
+      }
     } finally {
-      setPendingAction("");
+      if (mountedRef.current) {
+        setPendingAction("");
+      }
     }
   };
 
@@ -136,14 +169,24 @@ export default function SaveModelControls({
               </button>
 
               {savedSimulationId && (
-                <button
-                  type="button"
-                  onClick={() => persistSimulation("update")}
-                  disabled={pendingAction !== ""}
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {pendingAction === "update" ? "Updating..." : "Update"}
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => persistSimulation("update")}
+                    disabled={pendingAction !== ""}
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {pendingAction === "update" ? "Updating..." : "Update"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => persistSimulation("image")}
+                    disabled={pendingAction !== ""}
+                    className="rounded-lg border border-indigo-300 px-3 py-2 text-sm font-medium text-indigo-700 transition hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {pendingAction === "image" ? "Setting Image..." : "Set Image"}
+                  </button>
+                </>
               )}
             </div>
           </div>

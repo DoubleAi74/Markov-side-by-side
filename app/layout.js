@@ -3,6 +3,7 @@ import { config } from "@fortawesome/fontawesome-svg-core";
 import "@fortawesome/fontawesome-svg-core/styles.css";
 config.autoAddCss = false;
 import Navbar from "@/components/Navbar";
+import AppClientShell from "@/components/providers/AppClientShell";
 import { auth } from "@/auth";
 
 export const metadata = {
@@ -49,7 +50,9 @@ export default async function RootLayout({ children }) {
     <html lang="en">
       <body className="bg-slate-50 text-slate-800 antialiased">
         <Navbar sessionUser={sessionUser} />
-        <main>{children}</main>
+        <AppClientShell>
+          <main>{children}</main>
+        </AppClientShell>
       </body>
     </html>
   );

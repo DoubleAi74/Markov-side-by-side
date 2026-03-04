@@ -315,6 +315,20 @@ export default function GillespieSimulator({
     [numSims, paramRows, tMax, transitions, varRows],
   );
 
+  const buildPreviewChart = useCallback(
+    () => ({
+      datasets: chartDatasets,
+      legendItems,
+      xMax: chartXMax,
+      xLabel: "Time",
+      yLabel: "Count",
+      xTickSignificantFigures: 3,
+      xTickAutoSkip: false,
+      showLegend: true,
+    }),
+    [chartDatasets, chartXMax, legendItems],
+  );
+
   const runSimulation = useCallback(() => {
     setError("");
     setRunning(true);
@@ -768,6 +782,7 @@ export default function GillespieSimulator({
               onModelNameChange={setModelName}
               savedSimulationId={savedSimulationId}
               getPayload={buildSavePayload}
+              getPreviewChart={buildPreviewChart}
               onSaved={(savedSimulation) => {
                 setSavedSimulationId(savedSimulation.id);
                 setModelName(savedSimulation.name);

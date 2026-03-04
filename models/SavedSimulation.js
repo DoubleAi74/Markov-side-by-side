@@ -1,5 +1,46 @@
 import mongoose from "mongoose";
 
+const SavedSimulationPreviewSchema = new mongoose.Schema(
+  {
+    imageUrl: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    blurDataURL: {
+      type: String,
+      default: null,
+    },
+    objectKey: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    width: {
+      type: Number,
+      default: null,
+    },
+    height: {
+      type: Number,
+      default: null,
+    },
+    format: {
+      type: String,
+      default: null,
+      enum: [null, "image/webp", "image/jpeg"],
+    },
+    fileSize: {
+      type: Number,
+      default: null,
+    },
+    generatedAt: {
+      type: Date,
+      default: null,
+    },
+  },
+  { _id: false },
+);
+
 const SavedSimulationSchema = new mongoose.Schema(
   {
     userId: {
@@ -35,6 +76,10 @@ const SavedSimulationSchema = new mongoose.Schema(
     },
     lastOpenedAt: {
       type: Date,
+      default: null,
+    },
+    preview: {
+      type: SavedSimulationPreviewSchema,
       default: null,
     },
   },

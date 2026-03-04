@@ -329,6 +329,18 @@ export default function SDESimulator({
     [components, dt, numSims, paramRows, tMax],
   );
 
+  const buildPreviewChart = useCallback(
+    () => ({
+      datasets: chartDatasets,
+      legendItems,
+      xMax: chartXMax,
+      xLabel: "Time",
+      yLabel: "Value",
+      showLegend: true,
+    }),
+    [chartDatasets, chartXMax, legendItems],
+  );
+
   const runSimulation = useCallback(() => {
     setError("");
     setRunning(true);
@@ -776,6 +788,7 @@ export default function SDESimulator({
               onModelNameChange={setModelName}
               savedSimulationId={savedSimulationId}
               getPayload={buildSavePayload}
+              getPreviewChart={buildPreviewChart}
               onSaved={(savedSimulation) => {
                 setSavedSimulationId(savedSimulation.id);
                 setModelName(savedSimulation.name);

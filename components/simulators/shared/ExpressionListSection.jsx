@@ -111,12 +111,12 @@ export default function ExpressionListSection({
               </div>
 
               <div
-                className={`w-full px-2.5 py-1.5 overflow-hidden flex flex-col ${
+                className={`relative w-full px-2.5 py-1.5 overflow-hidden flex flex-col ${
                   active ? "bg-white" : "bg-slate-50"
                 }`}
               >
                 {rowNoteEnabled && (
-                  <div className="mb-[-8px] flex justify-end">
+                  <div className="absolute right-2 top-1 z-10 flex justify-end pointer-events-auto">
                     <input
                       type="text"
                       value={rowNoteLabel}

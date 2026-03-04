@@ -9,6 +9,7 @@ import {
   ValidationError,
   validateUpdateSavedSimulationInput,
 } from "@/lib/saved-simulations/validators";
+import { deleteSavedSimulationPreviewObject } from "@/lib/storage/r2";
 
 export const runtime = "nodejs";
 
@@ -37,7 +38,9 @@ export async function GET(_request, { params }) {
 
   try {
     const { id } = await params;
-    const savedSimulation = await getSavedSimulationForUser(id, sessionUser.id);
+    const savedSimulation = await getSavedSimulationForUser(id, sessionUser.id, {
+      includePayload: true,
+    });
 
     if (!savedSimulation) {
       return NextResponse.json({ error: "Saved simulation not found." }, { status: 404 });
@@ -60,7 +63,9 @@ export async function PATCH(request, { params }) {
 
   try {
     const { id } = await params;
-    const existing = await getSavedSimulationForUser(id, sessionUser.id);
+    const existing = await getSavedSimulationForUser(id, sessionUser.id, {
+      includePayload: false,
+    });
     if (!existing) {
       return NextResponse.json({ error: "Saved simulation not found." }, { status: 404 });
     }
@@ -101,6 +106,13 @@ export async function DELETE(_request, { params }) {
     if (!deleted) {
       return NextResponse.json({ error: "Saved simulation not found." }, { status: 404 });
     }
+
+    if (deleted.preview?.objectKey) {
+      deleteSavedSimulationPreviewObject(deleted.preview.objectKey).catch(
+        () => {},
+      );
+    }
+
     return new NextResponse(null, { status: 204 });
   } catch (error) {
     return NextResponse.json(

@@ -13,7 +13,7 @@ export default async function DashboardPage() {
   const savedSimulations = await listSavedSimulationsForUser(session.user.id);
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-8 md:py-12">
+    <div className="mx-auto w-full max-w-[1400px] px-4 py-8 md:py-12">
       <div className="mb-8">
         <h1 className="text-3xl font-bold tracking-tight text-slate-900">
           Saved Simulations
