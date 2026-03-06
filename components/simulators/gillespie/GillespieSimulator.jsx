@@ -610,7 +610,7 @@ export default function GillespieSimulator({
                               font-semibold
                               bg-transparent
                             "
-                            placeholder="Add Label "
+                            placeholder="Add Label &nbsp;"
                           />
                         </div>
                       )}

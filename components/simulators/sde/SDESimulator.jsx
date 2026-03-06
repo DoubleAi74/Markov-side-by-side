@@ -583,7 +583,7 @@ export default function SDESimulator({
                               font-semibold
                               bg-transparent
                             "
-                            placeholder="Add Label &nbsp; "
+                            placeholder="Add Label &nbsp;"
                           />
                         </div>
                       )}
