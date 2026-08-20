@@ -36,12 +36,14 @@ import ParameterSweepPanel from "../shared/ParameterSweepPanel";
 import { createLocalRunRecord, saveLocalRun } from "@/lib/workspace/local-runs";
 import WorkspaceInterchange from "../shared/WorkspaceInterchange";
 import WorkspaceResizeHandle, { useResizableEditor } from "../shared/WorkspaceResizeHandle";
+import ScientificExpressionInput from "../shared/ScientificExpressionInput";
 
 const TAB_ITEMS = [
   { id: "vars", label: "Variables" },
   { id: "params", label: "Parameters" },
   { id: "transitions", label: "Transitions" },
 ];
+const DEFAULT_PLOT_SPECS = [{ id: "plot-time-1", kind: "time" }];
 
 function handleTabKey(event, index, setActiveTab) {
   let next = index;
@@ -92,8 +94,9 @@ function makeId() {
 }
 
 function withTransitionIds(transitions, varCount) {
-  return transitions.map((transition) => ({
+  return transitions.map((transition, index) => ({
     id: makeId(),
+    name: transition.name ?? `Transition ${index + 1}`,
     rate: transition.rate,
     deltas: Array.from({ length: varCount }, (_, idx) =>
       String(transition.deltas?.[idx] ?? 0),
@@ -159,6 +162,7 @@ export default function GillespieSimulator({
   const [editorMode, setEditorMode] = useState("guided");
   const [mobileView, setMobileView] = useState("editor");
   const [retentionMode, setRetentionMode] = useState("raw");
+  const [plotSpecs, setPlotSpecs] = useState(() => initialSavedPayload?.plots?.length ? initialSavedPayload.plots : DEFAULT_PLOT_SPECS);
   const [rootSeed, setRootSeed] = useState(
     initialSavedPayload?.settings?.seed ?? "7640891576956012809",
   );
@@ -228,6 +232,10 @@ export default function GillespieSimulator({
       return [];
     }
   }, [varsText]);
+  const expressionSymbols = useMemo(() => [
+    ...variableNamesPreview,
+    ...paramRows.map((row) => String(row.text ?? "").match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/)?.[1]).filter(Boolean),
+  ], [paramRows, variableNamesPreview]);
 
   const legendItems = useMemo(
     () =>
@@ -271,6 +279,7 @@ export default function GillespieSimulator({
       ...items,
       {
         id: makeId(),
+        name: `Transition ${items.length + 1}`,
         rate: "",
         deltas: Array.from({ length: variableNamesPreview.length }, () => "0"),
         noteEnabled: false,
@@ -286,6 +295,7 @@ export default function GillespieSimulator({
       return [
         {
           id: makeId(),
+          name: "Transition 1",
           rate: "",
           deltas: Array.from(
             { length: variableNamesPreview.length },
@@ -297,6 +307,23 @@ export default function GillespieSimulator({
       ];
     });
   };
+
+  const duplicateTransition = (id) => setTransitions((items) => {
+    const index = items.findIndex((item) => item.id === id);
+    if (index < 0) return items;
+    const source = items[index];
+    const copy = { ...source, id: makeId(), name: `${source.name || `Transition ${index + 1}`} copy`, deltas: [...source.deltas] };
+    return [...items.slice(0, index + 1), copy, ...items.slice(index + 1)];
+  });
+
+  const moveTransition = (id, direction) => setTransitions((items) => {
+    const index = items.findIndex((item) => item.id === id);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= items.length) return items;
+    const next = [...items];
+    [next[index], next[target]] = [next[target], next[index]];
+    return next;
+  });
 
   const toggleTransitionNote = (id) => {
     setTransitions((items) =>
@@ -347,6 +374,7 @@ export default function GillespieSimulator({
         FOOD_CHAIN_PRESET.vars.length,
       ),
     );
+    setPlotSpecs(DEFAULT_PLOT_SPECS);
     setTMax(FOOD_CHAIN_PRESET.tMax);
     setNumSims(1);
     setError("");
@@ -364,6 +392,7 @@ export default function GillespieSimulator({
     setVarRows(hydrated.varRows);
     setParamRows(hydrated.paramRows);
     setTransitions(hydrated.transitions);
+    setPlotSpecs(hydrated.plots?.length ? hydrated.plots : DEFAULT_PLOT_SPECS);
     setTMax(hydrated.settings.tMax);
     setNumSims(hydrated.settings.numSims);
     setRootSeed(hydrated.settings.seed || createRootSeed());
@@ -392,8 +421,9 @@ export default function GillespieSimulator({
         tMax,
         numSims,
         seed: rootSeed,
+        plots: plotSpecs,
       }),
-    [numSims, paramRows, rootSeed, tMax, transitions, varRows],
+    [numSims, paramRows, plotSpecs, rootSeed, tMax, transitions, varRows],
   );
 
   const buildAnalysisModel = useCallback(
@@ -419,16 +449,17 @@ export default function GillespieSimulator({
 
   const importModel = useCallback((model) => {
     const hydrated = hydrateGillespiePayload(model);
-    setVarRows(hydrated.varRows); setParamRows(hydrated.paramRows); setTransitions(hydrated.transitions);
+    setVarRows(hydrated.varRows); setParamRows(hydrated.paramRows); setTransitions(hydrated.transitions); setPlotSpecs(hydrated.plots?.length ? hydrated.plots : DEFAULT_PLOT_SPECS);
     setTMax(hydrated.settings.tMax); setNumSims(hydrated.settings.numSims); setRootSeed(hydrated.settings.seed || createRootSeed());
     setSavedSimulationId(null); setModelName(""); setError(""); setWarning(""); setStats(""); setChartDatasets([]); setChartXMax(undefined); clearResultsCsv(); setMobileView("editor");
   }, [clearResultsCsv]);
 
-  const draftSnapshot = useMemo(() => ({ varRows, paramRows, transitions, tMax, numSims, rootSeed, modelName }), [modelName, numSims, paramRows, rootSeed, tMax, transitions, varRows]);
+  const draftSnapshot = useMemo(() => ({ varRows, paramRows, transitions, plotSpecs, tMax, numSims, rootSeed, modelName }), [modelName, numSims, paramRows, plotSpecs, rootSeed, tMax, transitions, varRows]);
   const restoreDraft = useCallback((snapshot) => {
     setVarRows(snapshot.varRows);
     setParamRows(snapshot.paramRows);
     setTransitions(snapshot.transitions);
+    setPlotSpecs(snapshot.plotSpecs?.length ? snapshot.plotSpecs : DEFAULT_PLOT_SPECS);
     setTMax(snapshot.tMax);
     setNumSims(snapshot.numSims);
     setRootSeed(snapshot.rootSeed);
@@ -641,7 +672,7 @@ export default function GillespieSimulator({
                   )}
                 </div>
 
-                {transitions.map((transition) => (
+                {transitions.map((transition, transitionIndex) => (
                   <div
                     key={transition.id}
                     className="grid grid-cols-[46px_1fr_36px] border-b border-slate-300 bg-slate-100"
@@ -712,24 +743,31 @@ export default function GillespieSimulator({
                         </div>
                       )}
 
+                      <div className="transition-structured-row">
+                        <label><span>Name</span><input type="text" value={transition.name ?? ""} onChange={(event) => updateTransition(transition.id, "name", event.target.value)} placeholder={`Transition ${transitionIndex + 1}`} /></label>
+                        <div className="transition-row-actions">
+                          <button type="button" onClick={() => moveTransition(transition.id, -1)} disabled={transitionIndex === 0} aria-label={`Move ${transition.name || `transition ${transitionIndex + 1}`} up`}>↑</button>
+                          <button type="button" onClick={() => moveTransition(transition.id, 1)} disabled={transitionIndex === transitions.length - 1} aria-label={`Move ${transition.name || `transition ${transitionIndex + 1}`} down`}>↓</button>
+                          <button type="button" onClick={() => duplicateTransition(transition.id)}>Duplicate</button>
+                        </div>
+                      </div>
+
                       <div className="relative w-full mb-[2px]">
-                        <input
-                          type="text"
+                        <ScientificExpressionInput
+                          label={`Rate for ${transition.name || transition.noteLabel || "transition"}`}
                           value={transition.rate}
-                          onChange={(event) =>
+                          onChange={(value) =>
                             updateTransition(
                               transition.id,
                               "rate",
-                              event.target.value,
+                              value,
                             )
                           }
-                          spellCheck={false}
+                          symbols={expressionSymbols}
+                          showPreview={editorMode === "guided"}
                           className="w-full pl-2.5 pr-14 py-1.5 border border-slate-300 rounded text-sm bg-white"
                           placeholder="h_eat * Plants * Herbivores"
                         />
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] uppercase tracking-wide text-emerald-900/60 font-semibold pointer-events-none">
-                          Rate
-                        </span>
                       </div>
 
                       <div className="relative w-full flex items-center justify-end gap-3">
@@ -820,6 +858,8 @@ export default function GillespieSimulator({
               solverLabel="Exact SSA"
               resultStatus={resultStatus}
               provenance={resultProvenance}
+              initialPlotSpecs={plotSpecs}
+              onPlotSpecsChange={setPlotSpecs}
               chartProps={{
                 xMax: chartXMax,
                 xLabel: "Time",

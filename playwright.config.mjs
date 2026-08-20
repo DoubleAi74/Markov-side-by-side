@@ -18,6 +18,11 @@ export default defineConfig({
   webServer: {
     command: "npm run dev -- --port 3100",
     url: "http://127.0.0.1:3100",
+    env: {
+      ...process.env,
+      AUTH_SECRET: process.env.AUTH_SECRET || "markov-lab-playwright-secret-do-not-use-outside-tests",
+      AUTH_TRUST_HOST: "true",
+    },
     reuseExistingServer: true,
     timeout: 120_000
   }

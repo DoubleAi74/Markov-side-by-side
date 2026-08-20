@@ -40,11 +40,13 @@ import ConvergenceAssistant from "../shared/ConvergenceAssistant";
 import { createLocalRunRecord, saveLocalRun } from "@/lib/workspace/local-runs";
 import WorkspaceInterchange from "../shared/WorkspaceInterchange";
 import WorkspaceResizeHandle, { useResizableEditor } from "../shared/WorkspaceResizeHandle";
+import ScientificExpressionInput from "../shared/ScientificExpressionInput";
 
 const TAB_ITEMS = [
   { id: "vars", label: "Variables" },
   { id: "params", label: "Parameters" },
 ];
+const DEFAULT_PLOT_SPECS = [{ id: "plot-time-1", kind: "time" }];
 
 function handleTabKey(event, index, setActiveTab) {
   let next = index;
@@ -186,6 +188,7 @@ export default function SDESimulator({
   const [editorMode, setEditorMode] = useState("guided");
   const [mobileView, setMobileView] = useState("editor");
   const [retentionMode, setRetentionMode] = useState("raw");
+  const [plotSpecs, setPlotSpecs] = useState(() => initialSavedPayload?.plots?.length ? initialSavedPayload.plots : DEFAULT_PLOT_SPECS);
   const [rootSeed, setRootSeed] = useState(
     initialSavedPayload?.settings?.seed ?? "7640891576956012809",
   );
@@ -264,6 +267,10 @@ export default function SDESimulator({
     });
     return entries;
   }, [components]);
+  const expressionSymbols = useMemo(() => [
+    ...variableLegendPreview.map((entry) => entry.name),
+    ...paramRows.map((row) => String(row.text ?? "").match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/)?.[1]).filter(Boolean),
+  ], [paramRows, variableLegendPreview]);
 
   const legendItems = useMemo(
     () =>
@@ -306,6 +313,58 @@ export default function SDESimulator({
     );
   };
 
+  const initializeNoiseMatrix = () => {
+    const sources = components.map((component, index) => ({ id: makeId(), name: `W_${component.name.trim() || index + 1}` }));
+    setNoiseSources(sources);
+    setComponents((rows) => rows.map((row, rowIndex) => ({
+      ...row,
+      diffusion: sources.map((noise, columnIndex) => ({ noiseId: noise.id, expression: rowIndex === columnIndex ? (row.diff || "0") : "0" })),
+      _displayNoiseId: sources[rowIndex]?.id ?? sources[0]?.id ?? null,
+    })));
+    setCorrelations(sources.map((_, row) => sources.map((__, column) => row === column ? 1 : 0)));
+  };
+
+  const updateNoiseSource = (id, name) => setNoiseSources((sources) => sources.map((source) => source.id === id ? { ...source, name } : source));
+
+  const addNoiseSource = () => {
+    if (!noiseSources.length) { initializeNoiseMatrix(); return; }
+    const noise = { id: makeId(), name: `W_${noiseSources.length + 1}` };
+    setNoiseSources((sources) => [...sources, noise]);
+    setComponents((rows) => rows.map((row) => ({ ...row, diffusion: [...(row.diffusion ?? []), { noiseId: noise.id, expression: "0" }] })));
+    setCorrelations((matrix) => {
+      const current = Array.isArray(matrix) ? matrix : noiseSources.map((_, row) => noiseSources.map((__, column) => row === column ? 1 : 0));
+      return [...current.map((row) => [...row, 0]), [...Array(current.length).fill(0), 1]];
+    });
+  };
+
+  const removeNoiseSource = (id) => {
+    const index = noiseSources.findIndex((source) => source.id === id);
+    if (index < 0 || noiseSources.length <= 1) return;
+    const remaining = noiseSources.filter((source) => source.id !== id);
+    setNoiseSources(remaining);
+    setComponents((rows) => rows.map((row) => {
+      const diffusion = (row.diffusion ?? []).filter((entry) => entry.noiseId !== id);
+      const displayNoiseId = row._displayNoiseId === id ? remaining[0]?.id ?? null : row._displayNoiseId;
+      const display = diffusion.find((entry) => entry.noiseId === displayNoiseId);
+      return { ...row, diffusion, _displayNoiseId: displayNoiseId, diff: display?.expression ?? "0" };
+    }));
+    setCorrelations((matrix) => Array.isArray(matrix) ? matrix.filter((_, row) => row !== index).map((row) => row.filter((_, column) => column !== index)) : null);
+  };
+
+  const updateDiffusionCell = (componentId, noiseId, expression) => setComponents((rows) => rows.map((row) => {
+    if (row.id !== componentId) return row;
+    const diffusion = noiseSources.map((noise) => ({ noiseId: noise.id, expression: noise.id === noiseId ? expression : (row.diffusion ?? []).find((entry) => entry.noiseId === noise.id)?.expression ?? "0" }));
+    return { ...row, diffusion, ...(row._displayNoiseId === noiseId ? { diff: expression } : {}) };
+  }));
+
+  const updateCorrelation = (rowIndex, columnIndex, value) => setCorrelations((matrix) => {
+    const next = (Array.isArray(matrix) ? matrix : noiseSources.map((_, row) => noiseSources.map((__, column) => row === column ? 1 : 0))).map((row) => [...row]);
+    const number = rowIndex === columnIndex ? 1 : Number(value);
+    next[rowIndex][columnIndex] = number;
+    next[columnIndex][rowIndex] = number;
+    return next;
+  });
+
   const addComponent = () => {
     setComponents((rows) => [
       ...rows,
@@ -315,6 +374,10 @@ export default function SDESimulator({
         init: "",
         drift: "",
         diff: "",
+        ...(noiseSources.length ? {
+          diffusion: noiseSources.map((noise) => ({ noiseId: noise.id, expression: "0" })),
+          _displayNoiseId: noiseSources[0].id,
+        } : {}),
         noteEnabled: false,
         noteLabel: "",
       },
@@ -370,6 +433,7 @@ export default function SDESimulator({
     setComponents(withComponentIds(DEFAULT_PRESET.components));
     setNoiseSources([]);
     setCorrelations(null);
+    setPlotSpecs(DEFAULT_PLOT_SPECS);
     setTMax(DEFAULT_PRESET.tMax);
     setDt(DEFAULT_PRESET.dt);
     setNumSims(DEFAULT_PRESET.numSims);
@@ -389,6 +453,7 @@ export default function SDESimulator({
     setComponents(hydrated.components);
     setNoiseSources(hydrated.noiseSources ?? []);
     setCorrelations(hydrated.correlations ?? null);
+    setPlotSpecs(hydrated.plots?.length ? hydrated.plots : DEFAULT_PLOT_SPECS);
     setTMax(hydrated.settings.tMax);
     setDt(hydrated.settings.dt);
     setNumSims(hydrated.settings.numSims);
@@ -420,8 +485,9 @@ export default function SDESimulator({
         seed: rootSeed,
         noiseSources,
         correlations,
+        plots: plotSpecs,
       }),
-    [components, correlations, dt, noiseSources, numSims, paramRows, rootSeed, tMax],
+    [components, correlations, dt, noiseSources, numSims, paramRows, plotSpecs, rootSeed, tMax],
   );
 
   const buildAnalysisModel = useCallback(
@@ -447,17 +513,18 @@ export default function SDESimulator({
 
   const importModel = useCallback((model) => {
     const hydrated = hydrateSDEPayload(model);
-    setParamRows(hydrated.paramRows); setComponents(hydrated.components); setNoiseSources(hydrated.noiseSources ?? []); setCorrelations(hydrated.correlations ?? null);
+    setParamRows(hydrated.paramRows); setComponents(hydrated.components); setNoiseSources(hydrated.noiseSources ?? []); setCorrelations(hydrated.correlations ?? null); setPlotSpecs(hydrated.plots?.length ? hydrated.plots : DEFAULT_PLOT_SPECS);
     setTMax(hydrated.settings.tMax); setDt(hydrated.settings.dt); setNumSims(hydrated.settings.numSims); setRootSeed(hydrated.settings.seed || createRootSeed());
     setSavedSimulationId(null); setModelName(""); setError(""); setWarning(""); setStats(""); setChartDatasets([]); setChartXMax(undefined); clearResultsCsv(); setMobileView("editor");
   }, [clearResultsCsv]);
 
-  const draftSnapshot = useMemo(() => ({ paramRows, components, noiseSources, correlations, tMax, dt, numSims, rootSeed, modelName }), [components, correlations, dt, modelName, noiseSources, numSims, paramRows, rootSeed, tMax]);
+  const draftSnapshot = useMemo(() => ({ paramRows, components, noiseSources, correlations, plotSpecs, tMax, dt, numSims, rootSeed, modelName }), [components, correlations, dt, modelName, noiseSources, numSims, paramRows, plotSpecs, rootSeed, tMax]);
   const restoreDraft = useCallback((snapshot) => {
     setParamRows(snapshot.paramRows);
     setComponents(snapshot.components);
     setNoiseSources(snapshot.noiseSources ?? []);
     setCorrelations(snapshot.correlations ?? null);
+    setPlotSpecs(snapshot.plotSpecs?.length ? snapshot.plotSpecs : DEFAULT_PLOT_SPECS);
     setTMax(snapshot.tMax);
     setDt(snapshot.dt);
     setNumSims(snapshot.numSims);
@@ -763,48 +830,39 @@ export default function SDESimulator({
                       )}
 
                       {/* DRIFT */}
-                      {/* FIX: Removed JS length logic. Added pr-14 to input to prevent text from hitting the label. */}
                       <div className="relative  w-full mb-[2px]">
-                        <input
-                          type="text"
+                        <ScientificExpressionInput
+                          label={`Drift for ${component.name || `variable ${index + 1}`}`}
                           value={component.drift}
-                          onChange={(event) =>
+                          onChange={(value) =>
                             updateComponent(
                               component.id,
                               "drift",
-                              event.target.value,
+                              value,
                             )
                           }
-                          spellCheck={false}
+                          symbols={expressionSymbols}
+                          showPreview={editorMode === "guided"}
                           className="w-full pl-2.5 pr-14 py-1.5 border border-slate-300 rounded text-sm bg-white"
                           placeholder="f(N,t)"
                         />
-                        {/* OPTIONAL: Add 'hidden sm:block' to the span classes below if you want to hide the label entirely on very small mobile screens */}
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] uppercase tracking-wide text-emerald-900/60 font-semibold pointer-events-none">
-                          Drift
-                        </span>
                       </div>
 
                       {/* DIFFUSION */}
-                      {/* FIX: Removed JS length logic. Added pr-16 to input to prevent text from hitting the label. */}
                       <div className="relative  w-full">
-                        <input
-                          type="text"
+                        <ScientificExpressionInput
+                          label={`Diffusion shortcut for ${component.name || `variable ${index + 1}`}`}
                           value={component.diff}
-                          onChange={(event) =>
-                            updateComponent(
-                              component.id,
-                              "diff",
-                              event.target.value,
-                            )
+                          onChange={(value) =>
+                            noiseSources.length && component._displayNoiseId
+                              ? updateDiffusionCell(component.id, component._displayNoiseId, value)
+                              : updateComponent(component.id, "diff", value)
                           }
-                          spellCheck={false}
+                          symbols={expressionSymbols}
+                          showPreview={editorMode === "guided"}
                           className="w-full pl-2.5 pr-16 py-1.5 border border-slate-300 rounded text-sm bg-white"
                           placeholder="g(N,t)"
                         />
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] uppercase tracking-wide text-orange-900/60 font-semibold pointer-events-none">
-                          Diffusion
-                        </span>
                       </div>
                     </div>
 
@@ -826,6 +884,69 @@ export default function SDESimulator({
                 >
                   + Add variable
                 </button>
+
+                <details className="noise-matrix-editor">
+                  <summary>Advanced noise matrix, correlations, and boundaries</summary>
+                  <div className="noise-matrix-body">
+                    {!noiseSources.length ? (
+                      <>
+                        <p className="text-xs text-slate-600">The compact diffusion field represents independent diagonal noise. Expand it to edit a general state-by-noise matrix.</p>
+                        <button type="button" onClick={initializeNoiseMatrix}>Expand general diffusion matrix</button>
+                      </>
+                    ) : (
+                      <>
+                        <section aria-labelledby="noise-sources-heading">
+                          <h3 id="noise-sources-heading" className="text-xs font-bold text-slate-700 mb-2">Named noise sources</h3>
+                          <div className="noise-source-list">
+                            {noiseSources.map((noise, index) => (
+                              <div className="noise-source-row" key={noise.id}>
+                                <label className="sr-only" htmlFor={`noise-${noise.id}`}>Noise source {index + 1} name</label>
+                                <input id={`noise-${noise.id}`} type="text" value={noise.name} onChange={(event) => updateNoiseSource(noise.id, event.target.value)} />
+                                <button type="button" onClick={() => removeNoiseSource(noise.id)} disabled={noiseSources.length === 1} aria-label={`Remove noise source ${noise.name}`}>Remove</button>
+                              </div>
+                            ))}
+                          </div>
+                          <button type="button" onClick={addNoiseSource} className="mt-2">+ Add noise source</button>
+                        </section>
+
+                        <section className="diffusion-matrix" aria-labelledby="diffusion-matrix-heading">
+                          <h3 id="diffusion-matrix-heading" className="text-xs font-bold text-slate-700 mb-2">State-by-noise diffusion matrix</h3>
+                          <div className="matrix-grid" style={{ gridTemplateColumns: `minmax(7rem, .7fr) repeat(${noiseSources.length}, minmax(8rem, 1fr))` }}>
+                            <span className="matrix-heading">State ↓ / noise →</span>
+                            {noiseSources.map((noise) => <span className="matrix-heading" key={noise.id}>{noise.name}</span>)}
+                            {components.flatMap((component, rowIndex) => [
+                              <span className="matrix-heading" key={`${component.id}-heading`}>{component.name || `Variable ${rowIndex + 1}`}</span>,
+                              ...noiseSources.map((noise) => {
+                                const value = (component.diffusion ?? []).find((entry) => entry.noiseId === noise.id)?.expression ?? "0";
+                                return <ScientificExpressionInput key={`${component.id}-${noise.id}`} label={`${component.name || `variable ${rowIndex + 1}`} diffusion from ${noise.name}`} value={value} onChange={(expression) => updateDiffusionCell(component.id, noise.id, expression)} symbols={expressionSymbols} className="w-full" />;
+                              }),
+                            ])}
+                          </div>
+                        </section>
+
+                        <section className="correlation-matrix" aria-labelledby="correlation-matrix-heading">
+                          <h3 id="correlation-matrix-heading" className="text-xs font-bold text-slate-700 mb-2">Noise correlation matrix</h3>
+                          <div className="matrix-grid" style={{ gridTemplateColumns: `minmax(7rem, .7fr) repeat(${noiseSources.length}, minmax(5rem, 1fr))` }}>
+                            <span className="matrix-heading">ρ</span>
+                            {noiseSources.map((noise) => <span className="matrix-heading" key={noise.id}>{noise.name}</span>)}
+                            {noiseSources.flatMap((rowNoise, rowIndex) => [
+                              <span className="matrix-heading" key={`${rowNoise.id}-correlation-heading`}>{rowNoise.name}</span>,
+                              ...noiseSources.map((columnNoise, columnIndex) => <label key={`${rowNoise.id}-${columnNoise.id}`}><span className="sr-only">Correlation of {rowNoise.name} with {columnNoise.name}</span><input type="number" min="-1" max="1" step="0.01" disabled={rowIndex === columnIndex} value={rowIndex === columnIndex ? 1 : (correlations?.[rowIndex]?.[columnIndex] ?? 0)} onChange={(event) => updateCorrelation(rowIndex, columnIndex, event.target.value)} /></label>),
+                            ])}
+                          </div>
+                        </section>
+                      </>
+                    )}
+
+                    <section aria-labelledby="boundary-heading">
+                      <h3 id="boundary-heading" className="text-xs font-bold text-slate-700 mb-2">Boundary policies</h3>
+                      {components.map((component, index) => {
+                        const boundary = component.boundary ?? { type: component.boundaryPolicy ?? "none" };
+                        return <div className="boundary-controls" key={`${component.id}-boundary`}><label><span className="text-[10px] text-slate-600">{component.name || `Variable ${index + 1}`} policy</span><select value={boundary.type ?? "none"} onChange={(event) => updateComponent(component.id, "boundary", { ...boundary, type: event.target.value })}><option value="none">None</option><option value="reflect">Reflect</option><option value="clamp">Clamp</option><option value="absorb">Absorb</option><option value="error">Error</option></select></label><label><span className="text-[10px] text-slate-600">Minimum</span><input type="number" step="any" value={boundary.min ?? ""} disabled={(boundary.type ?? "none") === "none"} onChange={(event) => updateComponent(component.id, "boundary", { ...boundary, min: event.target.value === "" ? undefined : Number(event.target.value) })} /></label><label><span className="text-[10px] text-slate-600">Maximum</span><input type="number" step="any" value={boundary.max ?? ""} disabled={(boundary.type ?? "none") === "none"} onChange={(event) => updateComponent(component.id, "boundary", { ...boundary, max: event.target.value === "" ? undefined : Number(event.target.value) })} /></label></div>;
+                      })}
+                    </section>
+                  </div>
+                </details>
               </section>
             )}
           </div>
@@ -851,6 +972,8 @@ export default function SDESimulator({
               solverLabel="Euler–Maruyama"
               resultStatus={resultStatus}
               provenance={resultProvenance}
+              initialPlotSpecs={plotSpecs}
+              onPlotSpecsChange={setPlotSpecs}
               chartProps={{ xMax: chartXMax, xLabel: "Time", yLabel: "Value", showTooltips: parseInt(numSims, 10) <= 1 }}
             />
           </div>

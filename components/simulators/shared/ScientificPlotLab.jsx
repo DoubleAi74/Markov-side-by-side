@@ -5,6 +5,7 @@ import SimChart from "./SimChart";
 import { autocorrelation, fanoFactor, firstPassageKaplanMeier, reactionDiagnostics, welchPsd } from "@/lib/analysis/diagnostics";
 
 const PhaseThreePlot = lazy(() => import("./PhaseThreePlot"));
+const EMPTY_PLOT_SPECS = Object.freeze([]);
 
 const PLOTS = [
   { id: "time", label: "Time series" },
@@ -25,6 +26,25 @@ const PLOTS = [
   { id: "summary", label: "Summary" },
   { id: "diagnostics", label: "Diagnostics" },
 ];
+
+const LEGACY_PLOT_KINDS = {
+  "time-series": "time",
+  "phase-2d": "phase",
+  "phase-3d": "phase3d",
+  "phase-matrix": "phaseMatrix",
+};
+
+function normalizePlotSpecs(specs) {
+  const used = new Set();
+  const normalized = [];
+  for (const [index, spec] of (Array.isArray(specs) ? specs : []).entries()) {
+    const kind = LEGACY_PLOT_KINDS[spec?.kind] ?? spec?.kind;
+    if (!PLOTS.some((plot) => plot.id === kind) || used.has(kind)) continue;
+    used.add(kind);
+    normalized.push({ ...spec, id: String(spec?.id || `plot-${kind}-${index + 1}`), kind });
+  }
+  return normalized.length ? normalized : [{ id: "plot-time-1", kind: "time" }];
+}
 
 function numericPoints(dataset) {
   return (Array.isArray(dataset?.data) ? dataset.data : [])
@@ -309,8 +329,18 @@ function downloadCanvas(canvas, filename) {
   }, "image/png");
 }
 
-export default function ScientificPlotLab({ datasets = [], legendItems = [], chartProps = {}, solverLabel = "Stochastic solver", resultStatus = "idle", provenance = null }) {
+export default function ScientificPlotLab({
+  datasets = [],
+  legendItems = [],
+  chartProps = {},
+  solverLabel = "Stochastic solver",
+  resultStatus = "idle",
+  provenance = null,
+  initialPlotSpecs = EMPTY_PLOT_SPECS,
+  onPlotSpecsChange = null,
+}) {
   const [activePlot, setActivePlot] = useState("time");
+  const [plotSpecs, setPlotSpecs] = useState(() => normalizePlotSpecs(initialPlotSpecs));
   const [showTable, setShowTable] = useState(false);
   const [pngScale, setPngScale] = useState(2);
   const [pngBackground, setPngBackground] = useState("white");
@@ -318,9 +348,21 @@ export default function ScientificPlotLab({ datasets = [], legendItems = [], cha
   const [selectedVariable, setSelectedVariable] = useState("");
   const [secondVariable, setSecondVariable] = useState("");
   const [passageThreshold, setPassageThreshold] = useState(1);
-  const figureRef = useRef(null);
+  const figureRefs = useRef(new Map());
   const tabRefs = useRef([]);
   const tabsId = useId();
+
+  useEffect(() => {
+    setPlotSpecs(normalizePlotSpecs(initialPlotSpecs));
+  }, [initialPlotSpecs]);
+
+  const commitPlotSpecs = (nextOrUpdater) => {
+    setPlotSpecs((current) => {
+      const next = normalizePlotSpecs(typeof nextOrUpdater === "function" ? nextOrUpdater(current) : nextOrUpdater);
+      onPlotSpecsChange?.(next);
+      return next;
+    });
+  };
 
   const variables = useMemo(() => {
     const seen = new Map();
@@ -397,62 +439,121 @@ export default function ScientificPlotLab({ datasets = [], legendItems = [], cha
     tabRefs.current[next]?.focus();
   };
 
-  const exportPng = async () => {
-    if (resultStatus !== "fresh") return;
-    const source = activePlot === "time" ? figureRef.current?.querySelector("canvas") : figureRef.current?.querySelector("svg");
-    const scale = Number(pngScale);
-    const baseWidth = source instanceof HTMLCanvasElement ? source.width : 1120;
-    const baseHeight = source instanceof HTMLCanvasElement ? source.height : 620;
-    const captionHeight = 72;
-    const canvas = document.createElement("canvas");
-    canvas.width = baseWidth * scale;
-    canvas.height = (baseHeight + captionHeight) * scale;
-    const context = canvas.getContext("2d");
-    context.scale(scale, scale);
-    if (pngBackground === "white") {
-      context.fillStyle = "#fffdfa";
-      context.fillRect(0, 0, baseWidth, baseHeight + captionHeight);
-    }
-    const finish = (drawable) => {
-      if (drawable) context.drawImage(drawable, 0, 0, baseWidth, baseHeight);
-      else {
-        context.fillStyle = "#172033";
-        context.font = "600 24px system-ui, sans-serif";
-        context.fillText(PLOTS.find((plot) => plot.id === activePlot)?.label ?? "Analysis", 24, 42);
-        context.font = "14px system-ui, sans-serif";
-        const words = String(figureRef.current?.innerText ?? "No tabular values are available.").replace(/\s+/g, " ").split(" ");
-        let line = "", y = 76;
-        for (const word of words) {
-          const candidate = `${line} ${word}`.trim();
-          if (context.measureText(candidate).width > baseWidth - 48) { context.fillText(line, 24, y); line = word; y += 24; if (y > baseHeight - 24) break; }
-          else line = candidate;
-        }
-        if (line && y <= baseHeight - 24) context.fillText(line, 24, y);
-      }
-      context.fillStyle = "#172033";
-      context.font = "600 16px system-ui, sans-serif";
-      context.fillText(`${PLOTS.find((plot) => plot.id === activePlot)?.label} · ${solverLabel} · ${provenance?.precision ?? "f64"}`, 18, baseHeight + 28);
-      context.font = "13px system-ui, sans-serif";
-      context.fillText(`Seed ${provenance?.seed ?? "not recorded"} · model ${provenance?.modelHash?.slice(0, 16) ?? "local"}`, 18, baseHeight + 52);
-      downloadCanvas(canvas, `markov-lab-${activePlot}-${scale}x.png`);
-    };
-    if (source instanceof HTMLCanvasElement) {
-      finish(source);
-      return;
-    }
-    if (!source) { finish(null); return; }
+  const drawableForFigure = async (figure, kind) => {
+    const source = kind === "time" ? figure?.querySelector("canvas") : figure?.querySelector("svg");
+    if (source instanceof HTMLCanvasElement) return source;
+    if (!source) return null;
     const clone = source.cloneNode(true);
     clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
     clone.insertAdjacentHTML("afterbegin", "<style>text{font-family:system-ui,sans-serif;fill:#172033}.plot-grid-line{stroke:#94a3b8;fill:none}</style>");
     const href = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)], { type: "image/svg+xml" }));
-    const image = new Image();
-    image.onload = () => { finish(image); URL.revokeObjectURL(href); };
-    image.onerror = () => URL.revokeObjectURL(href);
-    image.src = href;
+    try {
+      return await new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error("The plot image could not be rasterised."));
+        image.src = href;
+      });
+    } finally {
+      URL.revokeObjectURL(href);
+    }
   };
+
+  const drawExportCard = async (context, figure, kind, top, width, plotHeight) => {
+    const drawable = await drawableForFigure(figure, kind);
+    if (drawable) context.drawImage(drawable, 0, top, width, plotHeight);
+    else {
+      context.fillStyle = "#172033";
+      context.font = "600 24px system-ui, sans-serif";
+      context.fillText(PLOTS.find((plot) => plot.id === kind)?.label ?? "Analysis", 24, top + 42);
+      context.font = "14px system-ui, sans-serif";
+      const words = String(figure?.innerText ?? "No tabular values are available.").replace(/\s+/g, " ").split(" ");
+      let line = "", y = top + 76;
+      for (const word of words) {
+        const candidate = `${line} ${word}`.trim();
+        if (context.measureText(candidate).width > width - 48) {
+          context.fillText(line, 24, y); line = word; y += 24;
+          if (y > top + plotHeight - 24) break;
+        } else line = candidate;
+      }
+      if (line && y <= top + plotHeight - 24) context.fillText(line, 24, y);
+    }
+    context.fillStyle = "#172033";
+    context.font = "600 16px system-ui, sans-serif";
+    context.fillText(`${PLOTS.find((plot) => plot.id === kind)?.label} · ${solverLabel} · ${provenance?.precision ?? "f64"}`, 18, top + plotHeight + 28);
+    context.font = "13px system-ui, sans-serif";
+    context.fillText(`Seed ${provenance?.seed ?? "not recorded"} · model ${provenance?.modelHash?.slice(0, 16) ?? "local"}`, 18, top + plotHeight + 52);
+  };
+
+  const exportPng = async () => {
+    if (resultStatus !== "fresh") return;
+    const spec = plotSpecs.find((item) => item.kind === activePlot) ?? plotSpecs[0];
+    const figure = figureRefs.current.get(spec.id);
+    const scale = Number(pngScale);
+    const width = 1120, plotHeight = 620, captionHeight = 72;
+    const canvas = document.createElement("canvas");
+    canvas.width = width * scale;
+    canvas.height = (plotHeight + captionHeight) * scale;
+    const context = canvas.getContext("2d");
+    context.scale(scale, scale);
+    if (pngBackground === "white") { context.fillStyle = "#fffdfa"; context.fillRect(0, 0, width, plotHeight + captionHeight); }
+    await drawExportCard(context, figure, spec.kind, 0, width, plotHeight);
+    downloadCanvas(canvas, `markov-lab-${spec.kind}-${scale}x.png`);
+  };
+
+  const exportAllPng = async () => {
+    if (resultStatus !== "fresh") return;
+    const width = 1120, plotHeight = 620, captionHeight = 72, cardHeight = plotHeight + captionHeight;
+    const requestedScale = Number(pngScale);
+    const scale = Math.min(requestedScale, Math.max(1, Math.floor(16_000 / (cardHeight * plotSpecs.length))));
+    const canvas = document.createElement("canvas");
+    canvas.width = width * scale;
+    canvas.height = cardHeight * plotSpecs.length * scale;
+    const context = canvas.getContext("2d");
+    context.scale(scale, scale);
+    if (pngBackground === "white") { context.fillStyle = "#fffdfa"; context.fillRect(0, 0, width, cardHeight * plotSpecs.length); }
+    for (const [index, spec] of plotSpecs.entries()) {
+      await drawExportCard(context, figureRefs.current.get(spec.id), spec.kind, index * cardHeight, width, plotHeight);
+    }
+    downloadCanvas(canvas, `markov-lab-all-plots-${scale}x.png`);
+  };
+
+  const addPlotCard = () => {
+    if (plotSpecs.some((spec) => spec.kind === activePlot)) return;
+    commitPlotSpecs((current) => [...current, { id: `plot-${activePlot}-${current.length + 1}`, kind: activePlot }]);
+  };
+
+  const removePlotCard = (id) => commitPlotSpecs((current) => current.filter((spec) => spec.id !== id));
+  const movePlotCard = (id, direction) => commitPlotSpecs((current) => {
+    const index = current.findIndex((spec) => spec.id === id);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= current.length) return current;
+    const next = [...current];
+    [next[index], next[target]] = [next[target], next[index]];
+    return next;
+  });
 
   const needsEnsembleControls = ["histogram", "pmf", "kde", "ecdf", "scatter", "hexbin", "summary", "reactions"].includes(activePlot);
   const needsVariableControl = ["histogram", "pmf", "kde", "ecdf", "scatter", "hexbin", "summary", "acf", "psd", "survival", "reactions"].includes(activePlot);
+  const plotContent = (kind) => <>
+    {kind === "time" && <SimChart datasets={datasets} legendItems={legendItems} {...chartProps} />}
+    {kind === "phase" && <PhasePlot datasets={datasets} />}
+    {kind === "phase3d" && <Suspense fallback={<div className="plot-empty">Loading 3D renderer…</div>}><PhaseThreePlot datasets={phaseSeries(datasets, 3)} /></Suspense>}
+    {kind === "phaseMatrix" && <PhaseMatrix datasets={datasets} variables={variables} />}
+    {kind === "histogram" && <Histogram values={selectedValues} label={selectedLabel} time={analysisTime} />}
+    {kind === "pmf" && <Pmf values={selectedValues} label={selectedLabel} time={analysisTime} discrete={selectedDatasets.some((dataset) => dataset.stepped)} />}
+    {kind === "kde" && <Kde values={selectedValues} label={selectedLabel} time={analysisTime} />}
+    {kind === "ecdf" && <Ecdf values={selectedValues} label={selectedLabel} time={analysisTime} />}
+    {kind === "scatter" && <Scatter pairs={scatterPairs} xLabel={selectedLabel} yLabel={secondLabel} time={analysisTime} />}
+    {kind === "hexbin" && <Hexbin pairs={scatterPairs} xLabel={selectedLabel} yLabel={secondLabel} time={analysisTime} />}
+    {kind === "survival" && <SurvivalPlot datasets={selectedDatasets} label={selectedLabel} threshold={passageThreshold} />}
+    {kind === "reactions" && <ReactionPanel datasets={datasets} selectedValues={selectedValues} selectedLabel={selectedLabel} />}
+    {kind === "network" && <NetworkPanel model={modelSnapshot} />}
+    {kind === "acf" && <LineDiagnostic x={pathDiagnostic ? Float64Array.from({ length: pathDiagnostic.acf.length }, (_, index) => index) : []} y={pathDiagnostic?.acf ?? []} title="acf" description={`Autocorrelation of ${selectedLabel} for the first retained run`} xLabel="Lag (samples)" yLabel="Autocorrelation" caution="ACF describes one retained path; dependence reduces the effective sample size." />}
+    {kind === "psd" && <LineDiagnostic x={pathDiagnostic?.psd?.frequency ?? []} y={pathDiagnostic?.psd?.power ?? []} title="psd" description={`Welch power spectral density of ${selectedLabel} for the first retained run`} xLabel="Frequency" yLabel="Power" caution={pathDiagnostic?.caution ?? "Run a continuous-path model to inspect its spectrum."} />}
+    {kind === "summary" && <SummaryTable rows={summaryRows} time={analysisTime} />}
+    {kind === "diagnostics" && <div className="diagnostic-grid"><div><strong>{counts.runs}</strong><span>independent runs</span></div><div><strong>{counts.points.toLocaleString()}</strong><span>rendered points</span></div><div><strong>{solverLabel}</strong><span>numerical method</span></div><p>Diagnostics describe this retained result. Check convergence at more than one step size before drawing quantitative conclusions.</p></div>}
+  </>;
   return (
     <section className="plot-lab" aria-labelledby="analysis-heading">
       <div className="plot-lab-header">
@@ -461,7 +562,9 @@ export default function ScientificPlotLab({ datasets = [], legendItems = [], cha
           <button type="button" onClick={() => setShowTable((value) => !value)} aria-expanded={showTable}>Data table</button>
           <label><span className="sr-only">PNG scale</span><select value={pngScale} onChange={(event) => setPngScale(event.target.value)}><option value="1">1×</option><option value="2">2×</option><option value="4">4×</option></select></label>
           <label><span className="sr-only">PNG background</span><select value={pngBackground} onChange={(event) => setPngBackground(event.target.value)}><option value="white">White</option><option value="transparent">Transparent</option></select></label>
+          <button type="button" onClick={addPlotCard} disabled={plotSpecs.some((spec) => spec.kind === activePlot)}>Add plot card</button>
           <button type="button" onClick={exportPng} disabled={!datasets.length || resultStatus !== "fresh"} title={resultStatus === "stale" ? "Run the changed model before exporting" : undefined}>Export PNG</button>
+          <button type="button" onClick={exportAllPng} disabled={!datasets.length || resultStatus !== "fresh" || plotSpecs.length < 2}>Export all plots</button>
         </div>
       </div>
       <div className="plot-tabs" role="tablist" aria-label="Result plots">
@@ -475,28 +578,28 @@ export default function ScientificPlotLab({ datasets = [], legendItems = [], cha
           {activePlot === "survival" && <label>Passage threshold <input type="number" step="any" value={passageThreshold} onChange={(event) => setPassageThreshold(Number(event.target.value))} /></label>}
         </div>
       )}
-      <figure ref={figureRef} className="analysis-figure" aria-labelledby={`${tabsId}-caption`}>
-        <div id={`${tabsId}-${activePlot}-panel`} role="tabpanel" aria-labelledby={`${tabsId}-${activePlot}-tab`} tabIndex="0" className="analysis-canvas">
-          {activePlot === "time" && <SimChart datasets={datasets} legendItems={legendItems} {...chartProps} />}
-          {activePlot === "phase" && <PhasePlot datasets={datasets} />}
-          {activePlot === "phase3d" && <Suspense fallback={<div className="plot-empty">Loading 3D renderer…</div>}><PhaseThreePlot datasets={phaseSeries(datasets, 3)} /></Suspense>}
-          {activePlot === "phaseMatrix" && <PhaseMatrix datasets={datasets} variables={variables} />}
-          {activePlot === "histogram" && <Histogram values={selectedValues} label={selectedLabel} time={analysisTime} />}
-          {activePlot === "pmf" && <Pmf values={selectedValues} label={selectedLabel} time={analysisTime} discrete={selectedDatasets.some((dataset) => dataset.stepped)} />}
-          {activePlot === "kde" && <Kde values={selectedValues} label={selectedLabel} time={analysisTime} />}
-          {activePlot === "ecdf" && <Ecdf values={selectedValues} label={selectedLabel} time={analysisTime} />}
-          {activePlot === "scatter" && <Scatter pairs={scatterPairs} xLabel={selectedLabel} yLabel={secondLabel} time={analysisTime} />}
-          {activePlot === "hexbin" && <Hexbin pairs={scatterPairs} xLabel={selectedLabel} yLabel={secondLabel} time={analysisTime} />}
-          {activePlot === "survival" && <SurvivalPlot datasets={selectedDatasets} label={selectedLabel} threshold={passageThreshold} />}
-          {activePlot === "reactions" && <ReactionPanel datasets={datasets} selectedValues={selectedValues} selectedLabel={selectedLabel} />}
-          {activePlot === "network" && <NetworkPanel model={modelSnapshot} />}
-          {activePlot === "acf" && <LineDiagnostic x={pathDiagnostic ? Float64Array.from({ length: pathDiagnostic.acf.length }, (_, index) => index) : []} y={pathDiagnostic?.acf ?? []} title="acf" description={`Autocorrelation of ${selectedLabel} for the first retained run`} xLabel="Lag (samples)" yLabel="Autocorrelation" caution="ACF describes one retained path; dependence reduces the effective sample size." />}
-          {activePlot === "psd" && <LineDiagnostic x={pathDiagnostic?.psd?.frequency ?? []} y={pathDiagnostic?.psd?.power ?? []} title="psd" description={`Welch power spectral density of ${selectedLabel} for the first retained run`} xLabel="Frequency" yLabel="Power" caution={pathDiagnostic?.caution ?? "Run a continuous-path model to inspect its spectrum."} />}
-          {activePlot === "summary" && <SummaryTable rows={summaryRows} time={analysisTime} />}
-          {activePlot === "diagnostics" && <div className="diagnostic-grid"><div><strong>{counts.runs}</strong><span>independent runs</span></div><div><strong>{counts.points.toLocaleString()}</strong><span>rendered points</span></div><div><strong>{solverLabel}</strong><span>numerical method</span></div><p>Diagnostics describe this retained result. Check convergence at more than one step size before drawing quantitative conclusions.</p></div>}
-        </div>
-        <figcaption id={`${tabsId}-caption`}><strong>{PLOTS.find((plot) => plot.id === activePlot)?.label}.</strong> {resultStatus === "stale" ? "These results predate the current inputs; rerun before export." : `Current result: ${counts.runs} run${counts.runs === 1 ? "" : "s"}.`} {provenance ? `${provenance.solver} ${provenance.solverVersion}, ${provenance.backend} ${provenance.precision}; seed ${provenance.seed}.` : "Provenance appears after a successful run."} {needsEnsembleControls ? `Included ${selectedValues.length}; excluded ${selectedSamples.length - selectedValues.length} for ${selectedLabel} at t=${format(analysisTime)}.` : ""}</figcaption>
-      </figure>
+      <div className="plot-card-stack" aria-label="Ordered plot cards">
+        {plotSpecs.map((spec, index) => {
+          const label = PLOTS.find((plot) => plot.id === spec.kind)?.label ?? spec.kind;
+          return (
+            <figure key={spec.id} ref={(node) => { if (node) figureRefs.current.set(spec.id, node); else figureRefs.current.delete(spec.id); }} className={`analysis-figure plot-card ${spec.kind === activePlot ? "plot-card-active" : ""}`} aria-labelledby={`${tabsId}-${spec.id}-caption`}>
+              <div className="plot-card-toolbar">
+                <strong>{index + 1}. {label}</strong>
+                <div>
+                  <button type="button" onClick={() => { setActivePlot(spec.kind); document.getElementById(`${tabsId}-${spec.kind}-tab`)?.focus(); }}>Edit controls</button>
+                  <button type="button" onClick={() => movePlotCard(spec.id, -1)} disabled={index === 0} aria-label={`Move ${label} up`}>↑</button>
+                  <button type="button" onClick={() => movePlotCard(spec.id, 1)} disabled={index === plotSpecs.length - 1} aria-label={`Move ${label} down`}>↓</button>
+                  <button type="button" onClick={() => removePlotCard(spec.id)} disabled={plotSpecs.length === 1} aria-label={`Remove ${label}`}>Remove</button>
+                </div>
+              </div>
+              <div id={`${tabsId}-${spec.kind}-panel`} role="tabpanel" aria-labelledby={`${tabsId}-${spec.kind}-tab`} tabIndex="0" className="analysis-canvas">
+                {plotContent(spec.kind)}
+              </div>
+              <figcaption id={`${tabsId}-${spec.id}-caption`}><strong>{label}.</strong> {resultStatus === "stale" ? "These results predate the current inputs; rerun before export." : `Current result: ${counts.runs} run${counts.runs === 1 ? "" : "s"}.`} {provenance ? `${provenance.solver} ${provenance.solverVersion}, ${provenance.backend} ${provenance.precision}; seed ${provenance.seed}.` : "Provenance appears after a successful run."} {["histogram", "pmf", "kde", "ecdf", "scatter", "hexbin", "summary", "reactions"].includes(spec.kind) ? `Included ${selectedValues.length}; excluded ${selectedSamples.length - selectedValues.length} for ${selectedLabel} at t=${format(analysisTime)}.` : ""}</figcaption>
+            </figure>
+          );
+        })}
+      </div>
       {showTable && <SummaryTable rows={summaryRows} time={analysisTime} compact />}
     </section>
   );
