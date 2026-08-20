@@ -61,11 +61,6 @@ export default function PasswordResetForm({
   const handleResetSubmit = async (event) => {
     event.preventDefault();
 
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
-      return;
-    }
-
     if (password !== confirmPassword) {
       setError("Passwords do not match.");
       return;
@@ -115,12 +110,13 @@ export default function PasswordResetForm({
       {!hasToken && requestSent ? (
         <div className="mt-6 space-y-4">
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-            If an account exists for <span className="font-semibold">{email.trim()}</span>,
-            a password reset link has been sent.
+            If an account exists for{" "}
+            <span className="font-semibold">{email.trim()}</span>, a password
+            reset link has been sent.
           </div>
           <Link
             href="/login"
-            className="inline-flex text-sm font-semibold text-indigo-600 transition hover:text-indigo-500"
+            className="inline-flex text-sm font-semibold text-blue-900 transition hover:text-blue-800"
           >
             Back to login
           </Link>
@@ -133,7 +129,7 @@ export default function PasswordResetForm({
           </div>
           <Link
             href="/login"
-            className="inline-flex text-sm font-semibold text-indigo-600 transition hover:text-indigo-500"
+            className="inline-flex text-sm font-semibold text-blue-900 transition hover:text-blue-800"
           >
             Go to login
           </Link>
@@ -158,7 +154,7 @@ export default function PasswordResetForm({
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="you@example.com"
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-indigo-500"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-700"
               />
             </div>
           )}
@@ -178,8 +174,8 @@ export default function PasswordResetForm({
                   autoComplete="new-password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  placeholder="At least 8 characters"
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-indigo-500"
+                  placeholder="New password"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-700"
                 />
               </div>
 
@@ -197,7 +193,7 @@ export default function PasswordResetForm({
                   value={confirmPassword}
                   onChange={(event) => setConfirmPassword(event.target.value)}
                   placeholder="Re-enter your password"
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-indigo-500"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-700"
                 />
               </div>
             </>
@@ -212,7 +208,7 @@ export default function PasswordResetForm({
           <button
             type="submit"
             disabled={pending}
-            className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-full rounded bg-blue-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {pending
               ? hasToken
@@ -225,7 +221,7 @@ export default function PasswordResetForm({
 
           <Link
             href="/login"
-            className="inline-flex text-sm font-semibold text-indigo-600 transition hover:text-indigo-500"
+            className="inline-flex text-sm font-semibold text-blue-900 transition hover:text-blue-800"
           >
             Back to login
           </Link>

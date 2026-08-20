@@ -4,6 +4,7 @@ import {
   AuthInputError,
   registerPasswordAccount,
 } from "@/lib/auth/credentials-service";
+import { internalErrorResponse } from "@/lib/http/internal-error";
 
 export const runtime = "nodejs";
 
@@ -35,9 +36,6 @@ export async function POST(request) {
       return NextResponse.json({ error: error.message }, { status: 409 });
     }
 
-    return NextResponse.json(
-      { error: error.message || "Failed to create password account." },
-      { status: 500 },
-    );
+    return internalErrorResponse(error, "Failed to create password account.");
   }
 }

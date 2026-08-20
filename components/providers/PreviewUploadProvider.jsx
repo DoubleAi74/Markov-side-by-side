@@ -12,9 +12,12 @@ import { generateSavedSimulationChartPreview } from "@/lib/previews/chartPreview
 import { SAVED_SIMULATION_PREVIEW_UPDATED_EVENT } from "@/lib/previews/events";
 
 const PreviewUploadContext = createContext(null);
+let fallbackJobId = 0;
 
 function makeJobId() {
-  return Math.random().toString(36).slice(2);
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  fallbackJobId += 1;
+  return `preview-${Date.now()}-${fallbackJobId}`;
 }
 
 function clonePreviewChart(chart) {
@@ -66,6 +69,8 @@ export function PreviewUploadProvider({ children }) {
             body: JSON.stringify({
               imageDataUrl: preview.dataUrl,
               blurDataURL: preview.blurDataURL,
+              expectedRevision: nextJob.expectedRevision,
+              expectedDefinitionHash: nextJob.expectedDefinitionHash,
             }),
           },
         );

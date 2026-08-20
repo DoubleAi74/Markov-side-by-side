@@ -1,0 +1,33 @@
+name: Markov Lab quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run test:vitest
+      - run: npm run audit:security
+      - run: npm audit --audit-level=moderate
+      - name: Check native C++ runtime
+        run: c++ -std=c++17 -fsyntax-only templates/native/markov_native_runner.cpp
+      - name: Check native Python wrapper
+        run: python3 -m py_compile templates/native/run_markov_native.py templates/native/run_markov_native_ui.py
+      - name: Native and JS f64 conformance
+        run: npm run test:native
+      - run: npm run build
+      - run: npm run benchmark
+      - run: npx playwright install --with-deps chromium firefox webkit
+      - run: npm run test:e2e

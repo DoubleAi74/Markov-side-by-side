@@ -15,6 +15,8 @@ export default function ExpressionListSection({
   minRows = 1,
   showRowColor = false,
   colorForRow = null,
+  mode = "expert",
+  metadataEnabled = false,
 }) {
   const [focusedId, setFocusedId] = useState(null);
   const inputRefs = useRef({});
@@ -59,6 +61,14 @@ export default function ExpressionListSection({
           const active = focusedId === row.id;
           const rowNoteEnabled = Boolean(row.noteEnabled);
           const rowNoteLabel = row.noteLabel ?? "";
+          const equalsIndex = row.text.indexOf("=");
+          const guidedName = (equalsIndex >= 0 ? row.text.slice(0, equalsIndex) : row.text).trim();
+          const guidedValue = (equalsIndex >= 0 ? row.text.slice(equalsIndex + 1) : "").trim();
+          const updateGuidedPart = (part, value) => {
+            const nextName = part === "name" ? value : guidedName;
+            const nextValue = part === "value" ? value : guidedValue;
+            onUpdateRow(row.id, `${nextName} = ${nextValue}`);
+          };
 
           const toggleRowLabel = () => {
             onUpdateRow(row.id, row.text, { noteEnabled: !rowNoteEnabled });
@@ -147,6 +157,54 @@ export default function ExpressionListSection({
                   </div>
                 )}
 
+                {mode === "guided" ? (
+                  <div className="guided-editor">
+                  <div className="guided-fields">
+                    <label>
+                      <span>Name</span>
+                      <input
+                        ref={(node) => { inputRefs.current[row.id] = node; }}
+                        type="text"
+                        value={guidedName}
+                        placeholder={index === 0 ? placeholder.split("=")[0]?.trim() : ""}
+                        spellCheck={false}
+                        onFocus={() => setFocusedId(row.id)}
+                        onChange={(event) => updateGuidedPart("name", event.target.value)}
+                      />
+                    </label>
+                    <label>
+                      <span>Value</span>
+                      <input
+                        type="text"
+                        value={guidedValue}
+                        placeholder={index === 0 ? placeholder.split("=")[1]?.trim() : ""}
+                        inputMode="decimal"
+                        spellCheck={false}
+                        onFocus={() => setFocusedId(row.id)}
+                        onBlur={() => setFocusedId(null)}
+                        onChange={(event) => updateGuidedPart("value", event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            insertAfter(row.id);
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
+                  {metadataEnabled && (
+                    <details className="guided-metadata">
+                      <summary>Metadata and manual control</summary>
+                      <div>
+                        <label><span>Unit</span><input type="text" value={row.unit ?? ""} onChange={(event) => onUpdateRow(row.id, row.text, { unit: event.target.value })} placeholder="e.g. cells" /></label>
+                        <label><span>Description</span><input type="text" value={row.description ?? ""} onChange={(event) => onUpdateRow(row.id, row.text, { description: event.target.value })} placeholder="Scientific meaning" /></label>
+                      </div>
+                      <label className="slider-toggle"><input type="checkbox" checked={Boolean(row.slider)} onChange={(event) => onUpdateRow(row.id, row.text, { slider: event.target.checked ? { min: 0, max: Math.max(1, Number(guidedValue) * 2 || 1), step: 0.1 } : null })} /> Enable manual slider (does not autorun)</label>
+                      {row.slider && <div className="slider-settings"><label><span>Min</span><input type="number" value={row.slider.min} onChange={(event) => onUpdateRow(row.id, row.text, { slider: { ...row.slider, min: Number(event.target.value) } })} /></label><input aria-label={`Manual value for ${guidedName || `row ${index + 1}`}`} type="range" min={row.slider.min} max={row.slider.max} step={row.slider.step} value={Number(guidedValue) || 0} onChange={(event) => updateGuidedPart("value", event.target.value)} /><label><span>Max</span><input type="number" value={row.slider.max} onChange={(event) => onUpdateRow(row.id, row.text, { slider: { ...row.slider, max: Number(event.target.value) } })} /></label><label><span>Step</span><input type="number" min="0" value={row.slider.step} onChange={(event) => onUpdateRow(row.id, row.text, { slider: { ...row.slider, step: Number(event.target.value) } })} /></label></div>}
+                    </details>
+                  )}
+                  </div>
+                ) : (
                 <input
                   ref={(node) => {
                     inputRefs.current[row.id] = node;
@@ -176,6 +234,7 @@ export default function ExpressionListSection({
                   }}
                   className="w-full px-1 py-1.5   text-[15px] text-slate-900 outline-none focus:outline-none placeholder:text-slate-400"
                 />
+                )}
               </div>
 
               <button

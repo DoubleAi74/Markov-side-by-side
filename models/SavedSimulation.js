@@ -59,6 +59,13 @@ const SavedSimulationSchema = new mongoose.Schema(
       trim: true,
       maxlength: 120,
     },
+    slug: {
+      type: String,
+      default: null,
+      trim: true,
+      maxlength: 80,
+      immutable: true,
+    },
     description: {
       type: String,
       default: "",
@@ -73,6 +80,58 @@ const SavedSimulationSchema = new mongoose.Schema(
     payload: {
       type: mongoose.Schema.Types.Mixed,
       required: true,
+    },
+    visibility: {
+      type: String,
+      enum: ["public", "private"],
+      default: "public",
+      required: true,
+      index: true,
+    },
+    tags: {
+      type: [String],
+      default: [],
+    },
+    revision: {
+      type: Number,
+      default: 1,
+      min: 1,
+      required: true,
+    },
+    definitionHash: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    validationStatus: {
+      type: String,
+      enum: ["valid", "needsRepair", "invalid"],
+      default: "valid",
+      required: true,
+    },
+    provenance: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    deletedAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+    purgeAfter: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+    runCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    preservedRunCount: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
     lastOpenedAt: {
       type: Date,
@@ -90,6 +149,15 @@ const SavedSimulationSchema = new mongoose.Schema(
 
 SavedSimulationSchema.index({ userId: 1, updatedAt: -1 });
 SavedSimulationSchema.index({ userId: 1, simulatorType: 1, updatedAt: -1 });
+SavedSimulationSchema.index({ userId: 1, deletedAt: 1, updatedAt: -1 });
+SavedSimulationSchema.index({ userId: 1, visibility: 1, deletedAt: 1 });
+SavedSimulationSchema.index(
+  { userId: 1, slug: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { slug: { $type: "string" } },
+  },
+);
 
 export default mongoose.models.SavedSimulation ||
   mongoose.model("SavedSimulation", SavedSimulationSchema);

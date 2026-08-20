@@ -1,0 +1,18 @@
+{
+  "format": "markov-lab/native-config",
+  "formatVersion": 2,
+  "version": 2,
+  "name": "Native conformance birth process",
+  "simulatorType": "gillespie",
+  "model": {
+    "variables": [{ "name": "X", "initial": 0 }],
+    "parameters": [{ "name": "lambda", "value": 1.25 }],
+    "transitions": [{ "rate": "lambda", "change": { "X": "1" } }],
+    "time": { "tMax": 2 }
+  },
+  "run": {
+    "numSimulations": 4,
+    "seed": "123456789",
+    "csv": { "filename": "native-conformance.csv", "includeHeader": true }
+  }
+}

@@ -1,29 +1,18 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import SavedSimulationList from "@/components/dashboard/SavedSimulationList";
-import { listSavedSimulationsForUser } from "@/lib/saved-simulations/service";
+import { buildSessionUser } from "@/lib/auth/session-user";
 
-export default async function DashboardPage() {
+export default async function DashboardRedirectPage() {
   const session = await auth();
+  const sessionUser = await buildSessionUser(session, { ensureUsername: true });
 
-  if (!session?.user?.id) {
-    redirect("/login?callbackUrl=/dashboard");
+  if (!sessionUser?.id) {
+    redirect("/login");
   }
 
-  const savedSimulations = await listSavedSimulationsForUser(session.user.id);
+  if (sessionUser.username) {
+    redirect(`/-/${encodeURIComponent(sessionUser.username)}`);
+  }
 
-  return (
-    <div className="mx-auto w-full max-w-[1400px] px-4 py-8 md:py-12">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-          Saved Simulations
-        </h1>
-        <p className="mt-2 text-sm text-slate-500">
-          Signed in as {session.user.email || "authenticated user"}.
-        </p>
-      </div>
-
-      <SavedSimulationList initialItems={savedSimulations} />
-    </div>
-  );
+  redirect("/");
 }

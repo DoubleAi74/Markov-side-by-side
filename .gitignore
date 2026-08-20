@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# generated native/runtime caches
+__pycache__/
+*.pyc
+.matplotlib-cache/

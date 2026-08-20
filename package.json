@@ -1,34 +1,51 @@
 {
-  "name": "stochastic-app",
+  "name": "markov-lab",
   "version": "0.1.0",
+  "type": "module",
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node --test \"tests/**/*.test.mjs\"",
+    "test:unit": "node --test \"tests/unit/**/*.test.mjs\"",
+    "test:scientific": "node --test \"tests/scientific/**/*.test.mjs\"",
+    "test:api": "node --test \"tests/api/**/*.test.mjs\"",
+    "test:vitest": "vitest run",
+    "test:native": "node scripts/native-conformance.mjs",
+    "test:e2e": "playwright test",
+    "benchmark": "node scripts/benchmark.mjs",
+    "audit:security": "node scripts/security-audit.mjs"
   },
   "dependencies": {
     "@auth/mongodb-adapter": "^3.11.1",
     "@aws-sdk/client-s3": "^3.1000.0",
-    "@fortawesome/fontawesome-svg-core": "^7.2.0",
-    "@fortawesome/free-solid-svg-icons": "^7.2.0",
-    "@fortawesome/react-fontawesome": "^3.2.0",
     "bcryptjs": "^3.0.3",
     "chart.js": "^4.5.1",
+    "fast-xml-parser": "^5.10.1",
     "lucide-react": "^0.575.0",
     "mongodb": "^6.21.0",
     "mongoose": "^9.2.3",
-    "next": "16.1.6",
+    "next": "^16.3.1",
     "next-auth": "^5.0.0-beta.30",
     "react": "19.2.3",
     "react-chartjs-2": "^5.3.1",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.2",
+    "axe-core": "^4.13.0",
     "eslint": "^9",
-    "eslint-config-next": "16.1.6",
-    "tailwindcss": "^4"
+    "eslint-config-next": "^16.3.1",
+    "fast-check": "^4.9.0",
+    "jsdom": "^29.1.1",
+    "tailwindcss": "^4",
+    "vitest": "^4.1.10"
   }
 }

@@ -1,45 +1,41 @@
-# Markov Side-by-Side
+# Markov Lab
 
-Interactive stochastic simulation tools built with Next.js:
+Markov Lab is a reproducible stochastic-modelling workspace for jump processes,
+time-dependent continuous-time Markov processes, and stochastic differential
+equations. Anonymous users can edit, run, analyse, and export locally. Accounts
+add public/private models, immutable share URLs, forks, bounded run history, and
+recoverable deletion.
 
-- CTMC Gillespie simulator
-- time-varying CTMP simulator
-- SDE solver with Euler-Maruyama
+## Scientific runtime
 
-The app remains publicly usable without login. Authenticated users can now save simulator configurations to MongoDB and manage them from a dashboard.
+- Source-located safe expression parser and versioned stack bytecode; model
+  expressions cannot execute JavaScript and cannot call `random()`.
+- Stable UUID model entities and canonical `markov-lab/model` payload version 2.
+- Worker-pooled f64 reference solvers with fixed uint64 root seeds and
+  scheduling-independent per-run streams.
+- Direct SSA v2, integrated-hazard time-dependent SSA, migrated piecewise-frozen
+  compatibility CTMP, Euler–Maruyama v2, and restricted diagonal Milstein.
+- Typed raw buffers, explicit device-memory preflight, bounded summary retention,
+  display-only decimation, structured termination, and complete provenance.
+- Time, 2D/3D phase, terminal distribution, ECDF, ensemble summaries, and
+  diagnostics with accessible tables and provenance-aware PNG/CSV export.
 
-## Stack
+See [Numerical methodology](docs/METHODOLOGY.md) for assumptions and backend
+gates. JavaScript f64 is the scientific reference; WASM Auto and approximate f32
+WebGPU remain disabled until their checked-in evidence gates pass.
 
-- Next.js 16 App Router
-- React 19
-- Tailwind CSS 4
-- Chart.js
-- Auth.js v5 beta (`next-auth@beta`)
-- Resend email magic links
-- MongoDB
-- Mongoose
+## Local setup
 
-## Features
-
-- Public simulator access for anonymous users
-- Passwordless email login
-- Optional email/password login
-- JWT-backed Auth.js sessions
-- User-owned saved simulations
-- Dashboard for reopening and deleting saved models
-- Route-level loading of saved models via `?model=<id>`
-
-## Local Setup
-
-Install dependencies:
+Requires Node.js 22 and MongoDB.
 
 ```bash
 npm install
+npm run dev
 ```
 
-Create `.env.local` with:
+Create `.env.local` with at least:
 
-```bash
+```text
 AUTH_SECRET=
 MONGODB_URI=
 AUTH_RESEND_KEY=
@@ -47,69 +43,56 @@ AUTH_EMAIL_FROM=
 AUTH_TRUST_HOST=true
 ```
 
-Optional:
+Preview storage additionally uses the `R2_*` variables consumed by
+`lib/storage/r2.js`. `MARKOV_LAB_MAINTENANCE_SECRET` protects the purge endpoint.
+Performance telemetry is off unless
+`MARKOV_LAB_PERFORMANCE_TELEMETRY_ENABLED=true`; its strict allow-list excludes
+model content, seeds, and identity.
+
+## Verification
 
 ```bash
-AUTH_URL=
-MONGODB_DB=
+npm run lint
+npm test
+npm run test:vitest
+npm run audit:security
+npm run build
+npm run benchmark
 ```
 
-Notes:
+The Playwright/axe harness is `npm run test:e2e`; install its Chromium, Firefox,
+and WebKit binaries first with `npx playwright install --with-deps`. CI performs
+that step. The release checklist records the mobile Lighthouse thresholds; run
+them in browser-enabled CI with a currently audited Lighthouse runner.
 
-- `AUTH_EMAIL_FROM` must be a sender address from a verified Resend domain in production.
-- `MONGODB_URI` should point at the MongoDB database used for both Auth.js collections and app data.
-- The app uses the MongoDB adapter for auth collections and Mongoose only for app-domain models.
+## Migration and retention
 
-## Development
-
-Run the dev server:
+Dry-run migration (the default) prints every proposed change:
 
 ```bash
-npm run dev
+node scripts/migrate-saved-simulations-v2.mjs
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Apply only after reviewing the report and backing up the database:
 
-## Saved Simulation Model
+```bash
+node scripts/migrate-saved-simulations-v2.mjs --apply
+```
 
-The primary persisted app record is `SavedSimulation`.
+Unconvertible payloads remain intact in `needsRepair`. Soft-deleted models are
+restorable for 30 days. The secured maintenance endpoint or
+`scripts/purge-deleted-simulations.mjs` permanently removes expired models, run
+summaries, and preview objects. See [Operations](docs/OPERATIONS.md) and the
+[release checklist](docs/RELEASE_CHECKLIST.md). The exact local checks and the
+promotion gates that remain closed are recorded in the
+[release-candidate report](docs/RELEASE_CANDIDATE_REPORT.md).
 
-Each record stores:
+## Main routes
 
-- owner `userId`
-- simulator type
-- human-readable model name
-- payload version
-- serialized simulator editor state
+- `/gillespie`, `/ctmp-inhomo`, `/sde`: modelling workspaces
+- `/-/[username]` and `/-/[username]/[modelSlug]`: owner/public model routes
+- `/dashboard`: signed-in dashboard
+- `/api/interchange/json` and `/api/interchange/sbml`: strict interchange
+- `/api/saved-simulations/*/runs`: private bounded run history
 
-The app saves simulator definitions and settings, not raw simulation histories or chart traces.
-
-## Main Routes
-
-- `/` home page
-- `/gillespie` exact CTMC simulator
-- `/ctmp-inhomo` time-varying CTMP simulator
-- `/sde` stochastic differential equation simulator
-- `/login` email login page
-- `/dashboard` saved simulations for the current user
-
-## Auth Notes
-
-- Auth is configured in [`auth.js`](/Users/adamaldridge/Desktop/Projects%20A/Markob.sbs/stochastic-app-DB/auth.js).
-- Auth route handler lives at [`app/api/auth/[...nextauth]/route.js`](/Users/adamaldridge/Desktop/Projects%20A/Markob.sbs/stochastic-app-DB/app/api/auth/%5B...nextauth%5D/route.js).
-- The project uses Auth.js JWT sessions while still keeping the MongoDB adapter for users and verification tokens.
-- `session.user.id` is populated in the Auth.js session callback.
-
-## Persistence Notes
-
-- Native MongoDB client helper: [`lib/db/mongodb.js`](/Users/adamaldridge/Desktop/Projects%20A/Markob.sbs/stochastic-app-DB/lib/db/mongodb.js)
-- Mongoose connection helper: [`lib/db/mongoose.js`](/Users/adamaldridge/Desktop/Projects%20A/Markob.sbs/stochastic-app-DB/lib/db/mongoose.js)
-- Saved simulation model: [`models/SavedSimulation.js`](/Users/adamaldridge/Desktop/Projects%20A/Markob.sbs/stochastic-app-DB/models/SavedSimulation.js)
-- Saved simulation API routes:
-  - [`app/api/saved-simulations/route.js`](/Users/adamaldridge/Desktop/Projects%20A/Markob.sbs/stochastic-app-DB/app/api/saved-simulations/route.js)
-  - [`app/api/saved-simulations/[id]/route.js`](/Users/adamaldridge/Desktop/Projects%20A/Markob.sbs/stochastic-app-DB/app/api/saved-simulations/%5Bid%5D/route.js)
-
-## Documentation
-
-- Structure review: [`PROJECT_STRUCTURE_REVIEW.md`](/Users/adamaldridge/Desktop/Projects%20A/Markob.sbs/stochastic-app-DB/PROJECT_STRUCTURE_REVIEW.md)
-- Auth/database implementation spec: [`AUTH_MONGODB_UPGRADE_SPEC.md`](/Users/adamaldridge/Desktop/Projects%20A/Markob.sbs/stochastic-app-DB/AUTH_MONGODB_UPGRADE_SPEC.md)
+No production deployment is included in this repository state.

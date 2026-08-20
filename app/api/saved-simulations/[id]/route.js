@@ -4,12 +4,14 @@ import {
   deleteSavedSimulationForUser,
   getSavedSimulationForUser,
   updateSavedSimulationForUser,
+  RevisionConflictError,
 } from "@/lib/saved-simulations/service";
 import {
   ValidationError,
   validateUpdateSavedSimulationInput,
 } from "@/lib/saved-simulations/validators";
 import { deleteSavedSimulationPreviewObject } from "@/lib/storage/r2";
+import { internalErrorResponse } from "@/lib/http/internal-error";
 
 export const runtime = "nodejs";
 
@@ -48,10 +50,7 @@ export async function GET(_request, { params }) {
 
     return NextResponse.json(savedSimulation);
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || "Failed to fetch saved simulation." },
-      { status: 500 },
-    );
+    return internalErrorResponse(error, "Failed to fetch saved simulation.");
   }
 }
 
@@ -74,6 +73,7 @@ export async function PATCH(request, { params }) {
     const input = validateUpdateSavedSimulationInput({
       ...body,
       currentSimulatorType: existing.simulatorType,
+      currentPayloadVersion: existing.payloadVersion,
     });
     const updated = await updateSavedSimulationForUser(id, sessionUser.id, input);
 
@@ -81,16 +81,28 @@ export async function PATCH(request, { params }) {
       return NextResponse.json({ error: "Saved simulation not found." }, { status: 404 });
     }
 
+    const definitionChanged = existing.definitionHash !== updated.definitionHash;
+    if ((definitionChanged || input.visibility === "private") && existing.preview?.objectKey) {
+      deleteSavedSimulationPreviewObject(existing.preview.objectKey).catch(() => {});
+    }
+
     return NextResponse.json(updated);
   } catch (error) {
+    if (error instanceof RevisionConflictError) {
+      return NextResponse.json(
+        {
+          error: error.message,
+          code: "REVISION_CONFLICT",
+          currentRevision: error.currentRevision,
+        },
+        { status: 409 },
+      );
+    }
     if (error instanceof ValidationError) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    return NextResponse.json(
-      { error: error.message || "Failed to update saved simulation." },
-      { status: 500 },
-    );
+    return internalErrorResponse(error, "Failed to update saved simulation.");
   }
 }
 
@@ -107,17 +119,8 @@ export async function DELETE(_request, { params }) {
       return NextResponse.json({ error: "Saved simulation not found." }, { status: 404 });
     }
 
-    if (deleted.preview?.objectKey) {
-      deleteSavedSimulationPreviewObject(deleted.preview.objectKey).catch(
-        () => {},
-      );
-    }
-
     return new NextResponse(null, { status: 204 });
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || "Failed to delete saved simulation." },
-      { status: 500 },
-    );
+    return internalErrorResponse(error, "Failed to delete saved simulation.");
   }
 }

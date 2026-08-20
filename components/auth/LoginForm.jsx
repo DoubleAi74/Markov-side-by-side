@@ -34,7 +34,20 @@ function MagicLinkNotice({ sentTo }) {
   );
 }
 
-export default function LoginForm({ callbackUrl = "/dashboard" }) {
+async function resolvePostLoginUrl(fallback) {
+  try {
+    const res = await fetch("/api/account/username");
+    if (res.ok) {
+      const data = await res.json();
+      if (data.username) {
+        return `/-/${encodeURIComponent(data.username)}`;
+      }
+    }
+  } catch {}
+  return fallback;
+}
+
+export default function LoginForm({ callbackUrl = "/" }) {
   const [tab, setTab] = useState("login");
   const [loginMode, setLoginMode] = useState("password");
   const [email, setEmail] = useState("");
@@ -43,7 +56,7 @@ export default function LoginForm({ callbackUrl = "/dashboard" }) {
   const [error, setError] = useState("");
   const [sentTo, setSentTo] = useState("");
 
-  const safeCallbackUrl = normalizeAppPath(callbackUrl, "/dashboard");
+  const safeCallbackUrl = normalizeAppPath(callbackUrl, "/");
 
   const switchTab = (nextTab) => {
     setTab(nextTab);
@@ -109,11 +122,6 @@ export default function LoginForm({ callbackUrl = "/dashboard" }) {
       return;
     }
 
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
-      return;
-    }
-
     setPending(true);
     setError("");
     setSentTo("");
@@ -134,7 +142,8 @@ export default function LoginForm({ callbackUrl = "/dashboard" }) {
         );
       }
 
-      window.location.href = signInResponse.url || safeCallbackUrl;
+      const destination = await resolvePostLoginUrl(signInResponse.url || safeCallbackUrl);
+      window.location.href = destination;
     } catch (submitError) {
       setError(submitError.message || "Failed to sign in.");
     } finally {
@@ -148,11 +157,6 @@ export default function LoginForm({ callbackUrl = "/dashboard" }) {
     const normalizedEmail = email.trim();
     if (!isValidEmail(normalizedEmail)) {
       setError("Enter a valid email address.");
-      return;
-    }
-
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
       return;
     }
 
@@ -188,7 +192,8 @@ export default function LoginForm({ callbackUrl = "/dashboard" }) {
         throw new Error(signInResponse?.error || "Account created, but sign-in failed.");
       }
 
-      window.location.href = signInResponse.url || safeCallbackUrl;
+      const destination = await resolvePostLoginUrl(signInResponse.url || safeCallbackUrl);
+      window.location.href = destination;
     } catch (submitError) {
       setError(submitError.message || "Failed to create account.");
     } finally {
@@ -256,7 +261,7 @@ export default function LoginForm({ callbackUrl = "/dashboard" }) {
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               placeholder="you@example.com"
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-indigo-500"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-700"
             />
           </div>
 
@@ -273,8 +278,8 @@ export default function LoginForm({ callbackUrl = "/dashboard" }) {
               autoComplete="new-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              placeholder="At least 8 characters"
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-indigo-500"
+              placeholder="Enter a password"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-700"
             />
           </div>
 
@@ -283,7 +288,7 @@ export default function LoginForm({ callbackUrl = "/dashboard" }) {
           <button
             type="submit"
             disabled={pending}
-            className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-full rounded bg-blue-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {pending ? "Creating Account..." : "Sign Up"}
           </button>
@@ -304,7 +309,7 @@ export default function LoginForm({ callbackUrl = "/dashboard" }) {
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               placeholder="you@example.com"
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-indigo-500"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-700"
             />
           </div>
 
@@ -314,7 +319,7 @@ export default function LoginForm({ callbackUrl = "/dashboard" }) {
           <button
             type="submit"
             disabled={pending}
-            className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-full rounded bg-blue-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {pending ? "Sending Link..." : "Send Link"}
           </button>
@@ -323,7 +328,7 @@ export default function LoginForm({ callbackUrl = "/dashboard" }) {
             <button
               type="button"
               onClick={showPasswordLoginMode}
-              className="text-sm font-semibold text-indigo-600 transition hover:text-indigo-500"
+              className="text-sm font-semibold text-blue-900 transition hover:text-blue-800"
             >
               Back to password login
             </button>
@@ -345,7 +350,7 @@ export default function LoginForm({ callbackUrl = "/dashboard" }) {
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               placeholder="you@example.com"
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-indigo-500"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-700"
             />
           </div>
 
@@ -363,7 +368,7 @@ export default function LoginForm({ callbackUrl = "/dashboard" }) {
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               placeholder="Enter your password"
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-indigo-500"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-700"
             />
           </div>
 
@@ -372,7 +377,7 @@ export default function LoginForm({ callbackUrl = "/dashboard" }) {
               href={`/reset-password${
                 email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ""
               }`}
-              className="text-sm font-semibold text-indigo-600 transition hover:text-indigo-500"
+              className="text-sm font-semibold text-blue-900 transition hover:text-blue-800"
             >
               Forgot password?
             </Link>
@@ -383,7 +388,7 @@ export default function LoginForm({ callbackUrl = "/dashboard" }) {
           <button
             type="submit"
             disabled={pending}
-            className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-full rounded bg-blue-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {pending ? "Signing In..." : "Sign In"}
           </button>
@@ -393,7 +398,7 @@ export default function LoginForm({ callbackUrl = "/dashboard" }) {
           <button
             type="button"
             onClick={showMagicLinkMode}
-            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            className="w-full rounded border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
           >
             Sign in with Magic Link
           </button>

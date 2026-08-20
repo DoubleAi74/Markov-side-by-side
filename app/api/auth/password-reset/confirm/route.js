@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { AuthInputError } from "@/lib/auth/passwords";
 import { resetPasswordWithToken } from "@/lib/auth/password-reset-service";
+import { internalErrorResponse } from "@/lib/http/internal-error";
 
 export const runtime = "nodejs";
 
@@ -26,11 +27,6 @@ export async function POST(request) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    return NextResponse.json(
-      {
-        error: error.message || "Failed to reset password.",
-      },
-      { status: 500 },
-    );
+    return internalErrorResponse(error, "Failed to reset password.");
   }
 }

@@ -1,28 +1,59 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import SimChart from "../shared/SimChart";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import ScientificPlotLab from "../shared/ScientificPlotLab";
+import WorkspaceHeader from "../shared/WorkspaceHeader";
+import { createRootSeed } from "@/lib/simulation/rng";
+import {
+  buildResultProvenance,
+  canonicalModelFromSerialized,
+  createCanonicalCoordinator,
+  datasetsFromRuns,
+  formatStructuredError,
+  makeClientNamespace,
+  makeSimulationRequest,
+  persistBoundedRunHistory,
+  resultIssues,
+} from "../shared/canonicalSimulation";
 import ExpressionListSection from "../shared/ExpressionListSection";
 import SaveModelControls from "../shared/SaveModelControls";
 import {
-  GILLESPIE_SERIES_COLORS,
-  getSeriesColor,
-  hexToRgba,
-} from "../shared/seriesColors";
-import { Transition, Gillespie } from "./engine";
-import { compileExpression } from "@/lib/compile";
+  buildSimulationResultsCsv,
+  createSimulationResultsFilename,
+  downloadCsvText,
+} from "../shared/resultsCsv";
+import { GILLESPIE_SERIES_COLORS, getSeriesColor } from "../shared/seriesColors";
 import { assignmentsToText, parseNameValueLines } from "@/lib/modelParsers";
 import {
   hydrateGillespiePayload,
   serializeGillespieState,
 } from "@/lib/saved-simulations/serializers";
 import { X } from "lucide-react";
+import RunHistoryPanel from "../shared/RunHistoryPanel";
+import { DraftRecoveryBanner, useWorkspaceDraft } from "../shared/WorkspaceDraft";
+import WorkspaceHistoryControls, { useWorkspaceHistory } from "../shared/WorkspaceHistoryControls";
+import ParameterSweepPanel from "../shared/ParameterSweepPanel";
+import { createLocalRunRecord, saveLocalRun } from "@/lib/workspace/local-runs";
+import WorkspaceInterchange from "../shared/WorkspaceInterchange";
+import WorkspaceResizeHandle, { useResizableEditor } from "../shared/WorkspaceResizeHandle";
 
 const TAB_ITEMS = [
   { id: "vars", label: "Variables" },
   { id: "params", label: "Parameters" },
   { id: "transitions", label: "Transitions" },
 ];
+
+function handleTabKey(event, index, setActiveTab) {
+  let next = index;
+  if (event.key === "ArrowRight") next = (index + 1) % TAB_ITEMS.length;
+  else if (event.key === "ArrowLeft") next = (index - 1 + TAB_ITEMS.length) % TAB_ITEMS.length;
+  else if (event.key === "Home") next = 0;
+  else if (event.key === "End") next = TAB_ITEMS.length - 1;
+  else return;
+  event.preventDefault();
+  setActiveTab(TAB_ITEMS[next].id);
+  event.currentTarget.parentElement?.querySelectorAll('[role="tab"]')[next]?.focus();
+}
 
 const FOOD_CHAIN_PRESET = {
   vars: [
@@ -57,7 +88,7 @@ const FOOD_CHAIN_PRESET = {
 };
 
 function makeId() {
-  return Math.random().toString(36).slice(2);
+  return makeClientNamespace("gillespie-row");
 }
 
 function withTransitionIds(transitions, varCount) {
@@ -114,6 +145,8 @@ function buildLegendLabelsFromRows(variableNames, rows) {
 export default function GillespieSimulator({
   sessionUser = null,
   initialSavedSimulation = null,
+  exportUsername = null,
+  canEditCurrentModel = true,
 }) {
   const initialSavedPayload = useMemo(
     () =>
@@ -123,6 +156,12 @@ export default function GillespieSimulator({
     [initialSavedSimulation],
   );
   const [activeTab, setActiveTab] = useState("vars");
+  const [editorMode, setEditorMode] = useState("guided");
+  const [mobileView, setMobileView] = useState("editor");
+  const [retentionMode, setRetentionMode] = useState("raw");
+  const [rootSeed, setRootSeed] = useState(
+    initialSavedPayload?.settings?.seed ?? "7640891576956012809",
+  );
   const [varRows, setVarRows] = useState(() =>
     initialSavedPayload?.varRows ??
     textToRows(assignmentsToText(FOOD_CHAIN_PRESET.vars)),
@@ -146,7 +185,9 @@ export default function GillespieSimulator({
     initialSavedPayload?.settings?.numSims ?? 1,
   );
   const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState({ completed: 0, total: 0 });
   const [error, setError] = useState("");
+  const [warning, setWarning] = useState("");
   const [stats, setStats] = useState("");
   const [chartDatasets, setChartDatasets] = useState([]);
   const [chartXMax, setChartXMax] = useState(undefined);
@@ -156,9 +197,29 @@ export default function GillespieSimulator({
   const [modelName, setModelName] = useState(
     initialSavedSimulation?.name ?? "",
   );
+  const resultsCsvRef = useRef(null);
+  const [hasResultsCsv, setHasResultsCsv] = useState(false);
+  const coordinatorRef = useRef(null);
+  const activeJobRef = useRef(null);
+  const modelNamespaceRef = useRef(
+    initialSavedSimulation?.id ?? makeClientNamespace("gillespie"),
+  );
+  const [resultProvenance, setResultProvenance] = useState(null);
+  const [historyRefresh, setHistoryRefresh] = useState(0);
+  const editorPane = useResizableEditor("markov-lab:gillespie:editor-width", 470);
+
+  useEffect(() => {
+    if (!initialSavedPayload?.settings?.seed) setRootSeed(createRootSeed());
+  }, [initialSavedPayload?.settings?.seed]);
+
+  useEffect(() => () => {
+    activeJobRef.current?.cancel?.();
+  }, []);
 
   const varsText = useMemo(() => rowsToText(varRows), [varRows]);
   const paramsText = useMemo(() => rowsToText(paramRows), [paramRows]);
+  const runInputSignature = useMemo(() => JSON.stringify({ varsText, paramsText, transitions, tMax, numSims, rootSeed }), [varsText, paramsText, transitions, tMax, numSims, rootSeed]);
+  const lastRunSignatureRef = useRef("");
 
   const variableNamesPreview = useMemo(() => {
     try {
@@ -263,6 +324,20 @@ export default function GillespieSimulator({
     );
   };
 
+  const clearResultsCsv = useCallback(() => {
+    resultsCsvRef.current = null;
+    setHasResultsCsv(false);
+  }, []);
+
+  const handleDownloadResultsCsv = useCallback(() => {
+    const resultsCsv = resultsCsvRef.current;
+    if (!resultsCsv) {
+      return;
+    }
+
+    downloadCsvText(resultsCsv.csvText, resultsCsv.filename);
+  }, []);
+
   const loadPreset = () => {
     setVarRows(textToRows(assignmentsToText(FOOD_CHAIN_PRESET.vars)));
     setParamRows(textToRows(assignmentsToText(FOOD_CHAIN_PRESET.params)));
@@ -275,9 +350,11 @@ export default function GillespieSimulator({
     setTMax(FOOD_CHAIN_PRESET.tMax);
     setNumSims(1);
     setError("");
+    setWarning("");
     setStats("");
     setChartDatasets([]);
     setChartXMax(undefined);
+    clearResultsCsv();
   };
 
   const applySavedSimulation = useCallback((savedSimulation) => {
@@ -289,13 +366,16 @@ export default function GillespieSimulator({
     setTransitions(hydrated.transitions);
     setTMax(hydrated.settings.tMax);
     setNumSims(hydrated.settings.numSims);
+    setRootSeed(hydrated.settings.seed || createRootSeed());
     setSavedSimulationId(savedSimulation.id);
     setModelName(savedSimulation.name ?? "");
     setError("");
+    setWarning("");
     setStats("");
     setChartDatasets([]);
     setChartXMax(undefined);
-  }, []);
+    clearResultsCsv();
+  }, [clearResultsCsv]);
 
   useEffect(() => {
     if (initialSavedSimulation) {
@@ -311,9 +391,56 @@ export default function GillespieSimulator({
         transitions,
         tMax,
         numSims,
+        seed: rootSeed,
       }),
-    [numSims, paramRows, tMax, transitions, varRows],
+    [numSims, paramRows, rootSeed, tMax, transitions, varRows],
   );
+
+  const buildAnalysisModel = useCallback(
+    (runs = 1) => canonicalModelFromSerialized(buildSavePayload(), {
+      simulatorType: "gillespie",
+      seed: rootSeed,
+      runs,
+      namespace: savedSimulationId ?? modelNamespaceRef.current,
+    }),
+    [buildSavePayload, rootSeed, savedSimulationId],
+  );
+
+  const loadSweepCell = useCallback((assignments) => {
+    setParamRows((rows) => rows.map((row) => {
+      const match = String(row.text ?? "").match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/);
+      return match && Object.hasOwn(assignments, match[1])
+        ? { ...row, text: `${match[1]} = ${assignments[match[1]]}` }
+        : row;
+    }));
+    setMobileView("editor");
+    window.setTimeout(() => document.getElementById("gillespie-run")?.click(), 25);
+  }, []);
+
+  const importModel = useCallback((model) => {
+    const hydrated = hydrateGillespiePayload(model);
+    setVarRows(hydrated.varRows); setParamRows(hydrated.paramRows); setTransitions(hydrated.transitions);
+    setTMax(hydrated.settings.tMax); setNumSims(hydrated.settings.numSims); setRootSeed(hydrated.settings.seed || createRootSeed());
+    setSavedSimulationId(null); setModelName(""); setError(""); setWarning(""); setStats(""); setChartDatasets([]); setChartXMax(undefined); clearResultsCsv(); setMobileView("editor");
+  }, [clearResultsCsv]);
+
+  const draftSnapshot = useMemo(() => ({ varRows, paramRows, transitions, tMax, numSims, rootSeed, modelName }), [modelName, numSims, paramRows, rootSeed, tMax, transitions, varRows]);
+  const restoreDraft = useCallback((snapshot) => {
+    setVarRows(snapshot.varRows);
+    setParamRows(snapshot.paramRows);
+    setTransitions(snapshot.transitions);
+    setTMax(snapshot.tMax);
+    setNumSims(snapshot.numSims);
+    setRootSeed(snapshot.rootSeed);
+    setModelName(snapshot.modelName ?? "");
+    setError(""); setWarning(""); setStats(""); setChartDatasets([]); setChartXMax(undefined); clearResultsCsv();
+  }, [clearResultsCsv]);
+  const workspaceDraft = useWorkspaceDraft({
+    draftKey: `gillespie:${savedSimulationId ?? "anonymous"}`,
+    snapshot: draftSnapshot,
+    onRestore: restoreDraft,
+  });
+  const workspaceHistory = useWorkspaceHistory({ snapshot: draftSnapshot, onApply: restoreDraft });
 
   const buildPreviewChart = useCallback(
     () => ({
@@ -329,163 +456,129 @@ export default function GillespieSimulator({
     [chartDatasets, chartXMax, legendItems],
   );
 
-  const runSimulation = useCallback(() => {
+  const runSimulation = useCallback(async () => {
     setError("");
+    setWarning("");
     setRunning(true);
-
-    setTimeout(() => {
-      try {
-        const parsedVars = parseNameValueLines(varsText, "Variable");
-        const parsedParams = parseNameValueLines(paramsText, "Parameter");
-
-        if (parsedVars.length === 0) {
-          throw new Error("Please define at least one variable.");
+    setProgress({ completed: 0, total: Number(numSims) || 1 });
+    try {
+      const n = Math.min(Math.max(parseInt(numSims, 10) || 1, 1), 200);
+      const serialized = buildSavePayload();
+      const model = canonicalModelFromSerialized(serialized, {
+        simulatorType: "gillespie",
+        seed: rootSeed,
+        runs: n,
+        namespace: savedSimulationId ?? modelNamespaceRef.current,
+      });
+      const request = makeSimulationRequest(model, n, retentionMode);
+      coordinatorRef.current ??= createCanonicalCoordinator();
+      const job = coordinatorRef.current.run(request, {
+        onProgress: ({ completed, total }) => setProgress({ completed, total }),
+      });
+      activeJobRef.current = job;
+      const outcome = await job.promise;
+      activeJobRef.current = null;
+      let historyWarning = "";
+      if (sessionUser && savedSimulationId && canEditCurrentModel) {
+        try {
+          await persistBoundedRunHistory({ modelId: savedSimulationId, request, outcome });
+          setHistoryRefresh((value) => value + 1);
+        } catch (historyError) {
+          historyWarning = historyError.message || "Run history could not be saved.";
         }
-
-        const varNames = parsedVars.map((v) => v.name);
-        const varLegendLabels = buildLegendLabelsFromRows(varNames, varRows);
-        const paramNames = parsedParams.map((p) => p.name);
-        const initialState = parsedVars.map((v) => v.val);
-
-        const paramsObj = {};
-        parsedParams.forEach((p) => {
-          paramsObj[p.name] = p.val;
-        });
-
-        const activeTransitions = transitions.filter((transition) =>
-          transition.rate.trim(),
-        );
-        if (activeTransitions.length === 0) {
-          throw new Error("Please define at least one transition.");
+      } else {
+        try {
+          await saveLocalRun(`gillespie:${savedSimulationId ?? "anonymous"}`, createLocalRunRecord(request, outcome));
+          setHistoryRefresh((value) => value + 1);
+        } catch (historyError) {
+          historyWarning = historyError.message || "Local run history could not be saved.";
         }
-
-        const modelTransitions = activeTransitions.map((transition, trIdx) => {
-          const rateFunc = compileExpression(
-            transition.rate,
-            varNames,
-            paramNames,
-          );
-          const wrappedRate = (state, params) => rateFunc(state, 0, params);
-          const deltaFuncs = varNames.map((varName, varIdx) => {
-            const expr = String(transition.deltas[varIdx] ?? "0").trim() || "0";
-            try {
-              return compileExpression(expr, varNames, paramNames);
-            } catch (event) {
-              throw new Error(
-                `Transition ${trIdx + 1} (${varName} change): ${event.message}`,
-              );
-            }
-          });
-
-          const updateEvaluator = (state, t, params) =>
-            deltaFuncs.map((fn, varIdx) => {
-              const value = Number(fn(state, t, params));
-              if (!Number.isFinite(value)) {
-                throw new Error(
-                  `Transition ${trIdx + 1}: non-finite change for "${varNames[varIdx]}".`,
-                );
-              }
-              return value;
-            });
-
-          return new Transition(updateEvaluator, wrappedRate);
-        });
-
-        const sim = new Gillespie(modelTransitions, paramsObj);
-        const n = Math.min(Math.max(parseInt(numSims, 10) || 1, 1), 200);
-        const allResults = [];
-
-        for (let i = 0; i < n; i += 1) {
-          allResults.push(sim.run([...initialState], Number(tMax)));
-        }
-
-        let alpha = 1.0;
-        let lineWidth = 2;
-        if (n > 1) {
-          alpha = 0.6;
-          lineWidth = 1.5;
-        }
-        if (n > 10) {
-          alpha = 0.3;
-          lineWidth = 1;
-        }
-        if (n > 50) {
-          alpha = 0.15;
-          lineWidth = 1;
-        }
-
-        const totalRawPts =
-          allResults.reduce((sum, result) => sum + result.times.length, 0) *
-          varNames.length;
-
-        const step = 1;
-        //FOR REDUCED PLOTTING RESOLUTION
-        // const step = totalRawPts > 15000 ? Math.ceil(totalRawPts / 15000) : 1;
-
-        const datasets = [];
-        allResults.forEach((result, simIdx) => {
-          const times = result.times.filter((_, idx) => idx % step === 0);
-          const history = result.history.filter((_, idx) => idx % step === 0);
-
-          varNames.forEach((_, idx) => {
-            const color = hexToRgba(
-              getSeriesColor(GILLESPIE_SERIES_COLORS, idx),
-              alpha,
-            );
-            datasets.push({
-              label: simIdx === 0 ? varLegendLabels[idx] : "",
-              data: times.map((time, rowIdx) => ({
-                x: time,
-                y: history[rowIdx][idx],
-              })),
-              borderColor: color,
-              backgroundColor: color,
-              borderWidth: lineWidth,
-              stepped: "after",
-              pointRadius: 0,
-            });
-          });
-        });
-
-        setChartDatasets(datasets);
-        {
-          const requestedTMax = Number(tMax);
-          const observedMaxTime = Math.max(
-            ...allResults.map(
-              (result) => result.times[result.times.length - 1],
-            ),
-          );
-          setChartXMax(
-            Number.isFinite(requestedTMax) && requestedTMax > 0
-              ? requestedTMax
-              : observedMaxTime,
-          );
-        }
-
-        const avgEvents = Math.round(
-          allResults.reduce((sum, result) => sum + result.times.length - 1, 0) /
-            n,
-        );
-        setStats(`${avgEvents} events avg`);
-      } catch (event) {
-        setError(event.message);
-      } finally {
-        setRunning(false);
       }
-    }, 50);
-  }, [numSims, paramsText, tMax, transitions, varRows, varsText]);
+      if (outcome.status === "cancelled") {
+        setStats(`Cancelled after ${outcome.runs.length} of ${n} runs`);
+        setWarning(historyWarning);
+        return;
+      }
+      const issues = resultIssues(outcome.runs);
+      if (issues.length) {
+        const error = new Error(`${issues.length} run${issues.length === 1 ? "" : "s"} failed.`);
+        error.code = "RUN_FAILED";
+        error.details = { issues: issues.map((issue) => `Run ${issue.runIndex + 1} (${issue.code}): ${issue.message}`) };
+        throw error;
+      }
+      const durationMs = outcome.provenance.durationMs;
+      setWarning([
+        ...outcome.warnings.map((item) => item.message ?? item.code),
+        ...(retentionMode === "summary" ? ["Summary mode retained bounded sample paths and statistics; full-path CSV is unavailable."] : []),
+        ...(historyWarning ? [historyWarning] : []),
+      ].join("\n"));
+      const provenance = buildResultProvenance(request, durationMs);
+      const datasets = datasetsFromRuns({
+        runs: outcome.runs,
+        model,
+        colors: GILLESPIE_SERIES_COLORS,
+        stepped: true,
+      });
+      setChartDatasets(datasets);
+      setChartXMax(Number(model.settings.tMax));
+      setResultProvenance(provenance);
+      lastRunSignatureRef.current = runInputSignature;
+      resultsCsvRef.current = retentionMode === "raw" ? {
+        csvText: buildSimulationResultsCsv({ results: outcome.runs, columnNames: model.variables.map((variable) => variable.name), provenance }),
+        filename: createSimulationResultsFilename({ modelName, simulatorType: "gillespie" }),
+      } : null;
+      setHasResultsCsv(retentionMode === "raw");
+      const avgEvents = Math.round(outcome.runs.reduce((sum, run) => sum + run.eventCount, 0) / Math.max(1, outcome.runs.length));
+      setStats(`${avgEvents} events avg · ${durationMs.toFixed(0)} ms${retentionMode === "summary" ? ` · ${outcome.runs.length} sample paths retained` : ""}`);
+      setMobileView("results");
+    } catch (event) {
+      setError(formatStructuredError(event));
+    } finally {
+      activeJobRef.current = null;
+      setRunning(false);
+    }
+  }, [buildSavePayload, canEditCurrentModel, modelName, numSims, retentionMode, rootSeed, runInputSignature, savedSimulationId, sessionUser]);
+
+  const cancelSimulation = useCallback(() => {
+    activeJobRef.current?.cancel?.();
+  }, []);
+
+  const resultStatus = running ? "running" : error ? "failed" : chartDatasets.length ? (lastRunSignatureRef.current === runInputSignature ? "fresh" : "stale") : "idle";
 
   return (
-    <div className="flex flex-col h-auto md:h-[calc(100vh-3.5rem)] bg-slate-300">
+    <div className={`workspace-shell workspace-view-${mobileView}`}>
+      <DraftRecoveryBanner draft={workspaceDraft} />
+      <WorkspaceHistoryControls history={workspaceHistory} />
+      <WorkspaceHeader
+        title="Reaction network"
+        method="Exact Gillespie direct SSA"
+        mode={editorMode}
+        onModeChange={setEditorMode}
+        mobileView={mobileView}
+        onMobileViewChange={setMobileView}
+        resultStatus={resultStatus}
+        progress={progress}
+        seed={rootSeed}
+        onSeedChange={setRootSeed}
+        onNewSeed={() => setRootSeed(createRootSeed())}
+        retentionMode={retentionMode}
+        onRetentionModeChange={setRetentionMode}
+      />
       <div className="flex-1 min-h-0 flex flex-col md:flex-row">
-        <aside className="w-full md:w-[470px] bg-slate-100 border-r border-slate-300 overflow-hidden flex flex-col">
-          <div className="grid grid-cols-3 border-b border-slate-300 bg-slate-200">
-            {TAB_ITEMS.map((tab) => {
+        <aside className="workspace-editor workspace-editor-resizable w-full md:w-[470px] bg-slate-100 border-r border-slate-300 overflow-hidden flex flex-col" style={{ "--editor-width": `${editorPane.width}px` }}>
+          <div className="grid grid-cols-3 border-b border-slate-300 bg-slate-200" role="tablist" aria-label="Model editor sections">
+            {TAB_ITEMS.map((tab, tabIndex) => {
               const isActive = activeTab === tab.id;
               return (
                 <button
                   key={tab.id}
                   type="button"
+                  id={`gillespie-${tab.id}-tab`}
+                  role="tab"
+                  aria-selected={isActive}
+                  aria-controls={`gillespie-${tab.id}-panel`}
+                  tabIndex={isActive ? 0 : -1}
+                  onKeyDown={(event) => handleTabKey(event, tabIndex, setActiveTab)}
                   onClick={() => setActiveTab(tab.id)}
                   className={`py-2 text-xs font-semibold border-r border-slate-300 last:border-r-0 ${
                     isActive
@@ -499,7 +592,7 @@ export default function GillespieSimulator({
             })}
           </div>
 
-          <div className="flex-1 overflow-y-auto">
+          <div id={`gillespie-${activeTab}-panel`} role="tabpanel" aria-labelledby={`gillespie-${activeTab}-tab`} tabIndex="0" className="flex-1 overflow-y-auto">
             {activeTab === "vars" && (
               <ExpressionListSection
                 title="Variables"
@@ -513,6 +606,8 @@ export default function GillespieSimulator({
                 colorForRow={(index) =>
                   getSeriesColor(GILLESPIE_SERIES_COLORS, index)
                 }
+                mode={editorMode}
+                metadataEnabled
               />
             )}
 
@@ -525,6 +620,8 @@ export default function GillespieSimulator({
                 onInsertRowAfter={insertRow(setParamRows)}
                 onRemoveRow={removeRow(setParamRows)}
                 placeholder="k = 0.1"
+                mode={editorMode}
+                metadataEnabled
               />
             )}
 
@@ -702,40 +799,50 @@ export default function GillespieSimulator({
             )}
           </div>
 
-          {error && (
+          {(error || warning) && (
             <div className="p-3 border-t border-slate-300 space-y-2">
               {error && (
                 <div className="text-xs text-red-700 bg-red-100 border border-red-200 px-2 py-1.5 rounded whitespace-pre-wrap">
                   {error}
                 </div>
               )}
+              {warning && <div className="text-xs text-amber-800 bg-amber-100 border border-amber-300 px-2 py-1.5 rounded whitespace-pre-wrap">{warning}</div>}
             </div>
           )}
         </aside>
 
-        <div className="flex-1 min-h-[360px] md:min-h-0 p-2 md:p-3 bg-slate-200 flex flex-col gap-2">
-          <div className="flex-1 min-h-0 border border-slate-300 bg-white">
-            <SimChart
+        <WorkspaceResizeHandle width={editorPane.width} onChange={editorPane.update} />
+        <div className="workspace-results flex-1 min-h-[360px] md:min-h-0 p-2 md:p-3 bg-slate-200 flex flex-col gap-2">
+          <div className="flex-1 min-h-0 bg-white">
+            <ScientificPlotLab
               datasets={chartDatasets}
               legendItems={legendItems}
-              xMax={chartXMax}
-              xLabel="Time"
-              yLabel="Count"
-              xTickSignificantFigures={3}
-              xTickAutoSkip={false}
-              showTooltips={parseInt(numSims, 10) <= 1}
+              solverLabel="Exact SSA"
+              resultStatus={resultStatus}
+              provenance={resultProvenance}
+              chartProps={{
+                xMax: chartXMax,
+                xLabel: "Time",
+                yLabel: "Count",
+                xTickSignificantFigures: 3,
+                xTickAutoSkip: false,
+                showTooltips: parseInt(numSims, 10) <= 1,
+              }}
             />
           </div>
 
+          <ParameterSweepPanel buildModel={buildAnalysisModel} rootSeed={rootSeed} onSelectAssignments={loadSweepCell} />
+
           <div className="bg-white border border-slate-300">
-            <div className="px-3 py-2 flex flex-wrap items-center gap-2">
+            <div className="run-bar px-3 py-2 flex flex-wrap items-center gap-2">
               <div className="order-1 flex items-center gap-2 mr-1">
                 <button
-                  onClick={runSimulation}
-                  disabled={running}
-                  className="w-24 py-1.5 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-xs font-semibold text-white text-center"
+                  id="gillespie-run"
+                  type="button"
+                  onClick={running ? cancelSimulation : runSimulation}
+                  className="run-primary w-24 rounded bg-blue-900 hover:bg-blue-800 disabled:opacity-60 text-sm font-semibold text-white text-center"
                 >
-                  {running ? "Running..." : "Run"}
+                  {running ? "Cancel" : "Run"}
                 </button>
 
                 <button
@@ -743,6 +850,16 @@ export default function GillespieSimulator({
                   className="w-20 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs"
                 >
                   Reset
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDownloadResultsCsv}
+                  disabled={!hasResultsCsv || resultStatus !== "fresh"}
+                  title={resultStatus === "stale" ? "Run the changed model before exporting" : undefined}
+                  className="px-3 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 text-xs"
+                >
+                  Download CSV
                 </button>
               </div>
 
@@ -773,6 +890,7 @@ export default function GillespieSimulator({
                   {stats}
                 </span>
               )}
+              {(error || warning) && <div className="order-4 w-full md:hidden max-h-20 overflow-auto" aria-live="polite">{error && <p className="text-xs text-red-700 whitespace-pre-wrap">{error}</p>}{warning && <p className="text-xs text-amber-800 whitespace-pre-wrap">{warning}</p>}</div>}
             </div>
 
             <SaveModelControls
@@ -781,13 +899,25 @@ export default function GillespieSimulator({
               modelName={modelName}
               onModelNameChange={setModelName}
               savedSimulationId={savedSimulationId}
+              exportUsername={exportUsername}
+              exportSlug={initialSavedSimulation?.slug ?? null}
+              canEditCurrentModel={canEditCurrentModel}
+              initialDescription={initialSavedSimulation?.description}
+              initialTags={initialSavedSimulation?.tags}
+              initialVisibility={initialSavedSimulation?.visibility}
+              initialRevision={initialSavedSimulation?.revision}
+              sourceModelId={canEditCurrentModel ? null : initialSavedSimulation?.id}
+              previewIsFresh={resultStatus === "fresh"}
               getPayload={buildSavePayload}
               getPreviewChart={buildPreviewChart}
               onSaved={(savedSimulation) => {
                 setSavedSimulationId(savedSimulation.id);
                 setModelName(savedSimulation.name);
+                workspaceDraft.markSaved();
               }}
             />
+            <WorkspaceInterchange solverFamily="gillespie" buildModel={buildAnalysisModel} onImportModel={importModel} modelName={modelName} />
+            <RunHistoryPanel modelId={savedSimulationId} enabled={Boolean(sessionUser && canEditCurrentModel)} localKey={!sessionUser || !canEditCurrentModel ? `gillespie:${savedSimulationId ?? "anonymous"}` : null} refreshToken={historyRefresh} />
           </div>
         </div>
       </div>

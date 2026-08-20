@@ -1,15 +1,17 @@
 import "./globals.css";
-import { config } from "@fortawesome/fontawesome-svg-core";
-import "@fortawesome/fontawesome-svg-core/styles.css";
-config.autoAddCss = false;
 import Navbar from "@/components/Navbar";
 import AppClientShell from "@/components/providers/AppClientShell";
 import { auth } from "@/auth";
+import { buildSessionUser } from "@/lib/auth/session-user";
 
 export const metadata = {
-  title: "Markov Side-by-Side",
+  title: {
+    default: "Markov Lab",
+    template: "%s · Markov Lab",
+  },
   description:
-    "Interactive stochastic simulation tools: CTMC Gillespie, time-dependent CTMP, and SDE solver.",
+    "A reproducible browser workspace for jump processes, stochastic differential equations, and scientific analysis.",
+  robots: { index: false, follow: false },
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
@@ -38,20 +40,15 @@ export const metadata = {
 
 export default async function RootLayout({ children }) {
   const session = await auth();
-  const sessionUser = session?.user?.id
-    ? {
-        id: session.user.id,
-        email: session.user.email ?? "",
-        name: session.user.name ?? "",
-      }
-    : null;
+  const sessionUser = await buildSessionUser(session, { ensureUsername: true });
 
   return (
     <html lang="en">
       <body className="bg-slate-50 text-slate-800 antialiased">
+        <a className="skip-link" href="#main-content">Skip to main content</a>
         <Navbar sessionUser={sessionUser} />
         <AppClientShell>
-          <main>{children}</main>
+          <main id="main-content" tabIndex="-1">{children}</main>
         </AppClientShell>
       </body>
     </html>

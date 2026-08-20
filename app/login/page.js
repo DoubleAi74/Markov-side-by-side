@@ -1,14 +1,19 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { buildSessionUser } from "@/lib/auth/session-user";
 import LoginForm from "@/components/auth/LoginForm";
 import { normalizeAppPath } from "@/lib/auth/redirects";
 
 export default async function LoginPage({ searchParams }) {
   const session = await auth();
   const params = await searchParams;
-  const callbackUrl = normalizeAppPath(params?.callbackUrl, "/dashboard");
+  const callbackUrl = normalizeAppPath(params?.callbackUrl, "/");
 
   if (session?.user?.id) {
+    const sessionUser = await buildSessionUser(session, { ensureUsername: true });
+    if (sessionUser?.username) {
+      redirect(`/-/${encodeURIComponent(sessionUser.username)}`);
+    }
     redirect(callbackUrl);
   }
 
