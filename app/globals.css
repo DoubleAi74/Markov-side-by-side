@@ -11,7 +11,7 @@ body {
   --ink: #17242e;
   --navy: #173753;
   --teal: #146c72;
-  --rust: #b75436;
+  --rust: #a7462d;
   --rule: #c9c1b3;
 }
 
@@ -74,7 +74,7 @@ button, a, input, select, textarea { touch-action: manipulation; }
 /* Shared simulator workspace */
 .workspace-shell { display: flex; min-height: calc(100vh - 3.5rem); flex-direction: column; background: #dfe3e1; }
 .draft-recovery { display: flex; gap: 1rem; align-items: center; justify-content: space-between; padding: .65rem 1rem; border-bottom: 1px solid #d39b42; background: #fff7df; color: #694814; }.draft-recovery > div:first-child { display: grid; gap: .12rem; }.draft-recovery strong { font-size: .8rem; }.draft-recovery span { font-size: .72rem; }.draft-recovery > div:last-child { display: flex; flex-wrap: wrap; gap: .4rem; }.draft-recovery button { min-height: 44px; border: 1px solid #9b6a24; border-radius: .25rem; padding: .4rem .7rem; font-size: .72rem; font-weight: 750; }
-.workspace-history-controls { display: flex; gap: .4rem; align-items: center; min-height: 48px; padding: 0 1rem; border-bottom: 1px solid #cfd4d1; background: #eef0ec; }.workspace-history-controls button { min-width: 64px; min-height: 44px; border: 1px solid #b4bcb9; border-radius: .25rem; background: #fff; color: var(--navy); font-size: .72rem; font-weight: 750; }.workspace-history-controls button:disabled { opacity: .42; }.workspace-history-controls span { margin-left: .35rem; color: #667176; font-size: .66rem; }
+.workspace-history-controls { display: flex; gap: .4rem; align-items: center; min-height: 48px; padding: 0 1rem; border-bottom: 1px solid #cfd4d1; background: #eef0ec; }.workspace-history-controls button { min-width: 64px; min-height: 44px; border: 1px solid #b4bcb9; border-radius: .25rem; background: #fff; color: var(--navy); font-size: .72rem; font-weight: 750; }.workspace-history-controls button:disabled { opacity: .42; }.workspace-history-controls span { margin-left: .35rem; color: #5f696d; font-size: .66rem; }
 .workspace-header { display: flex; gap: 1rem; align-items: center; justify-content: space-between; min-height: 82px; padding: .85rem 1rem; border-bottom: 1px solid #bbc2c0; background: #f8f6f0; }
 .workspace-title { display: flex; gap: .8rem; align-items: center; }.workspace-title .eyebrow { margin-bottom: .15rem; }.workspace-title h1 { margin: 0; font: 500 clamp(1.25rem, 2vw, 1.7rem) Georgia, serif; }.workspace-method { margin: .15rem 0 0; color: #667177; font-size: .76rem; }
 .status-dot { width: .65rem; height: .65rem; flex: none; border: 2px solid #fff; border-radius: 50%; background: #78858b; box-shadow: 0 0 0 1px #9ba3a5; }.status-running { background: #d79333; }.status-fresh { background: #27836b; }.status-stale { background: #b75436; }.status-failed { background: #a7212d; }
@@ -139,6 +139,10 @@ body {
     -apple-system,
     sans-serif;
 }
+
+/* Tailwind's muted text tokens are too light on the warm/slate work surfaces. */
+.text-slate-500 { color: #475569 !important; }
+.text-slate-400 { color: #5f6b7a !important; }
 
 @media (max-width: 767px) {
   input,

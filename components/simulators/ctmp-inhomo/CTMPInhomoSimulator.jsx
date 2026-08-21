@@ -597,7 +597,7 @@ export default function CTMPInhomoSimulator({
                   className={`py-2 text-xs font-semibold border-r border-slate-300 last:border-r-0 ${
                     isActive
                       ? "bg-white text-slate-900"
-                      : "bg-slate-200 text-slate-500 hover:text-slate-700"
+                      : "bg-slate-200 text-slate-700 hover:text-slate-900"
                   }`}
                 >
                   {tab.label}
