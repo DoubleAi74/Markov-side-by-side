@@ -4,6 +4,13 @@ import { launch } from "chrome-launcher";
 import { chromium } from "@playwright/test";
 
 const url = "http://127.0.0.1:3100/";
+const deadline = (promise, timeoutMs, message) => new Promise((resolve, reject) => {
+  const timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+  Promise.resolve(promise).then(
+    (value) => { clearTimeout(timer); resolve(value); },
+    (error) => { clearTimeout(timer); reject(error); },
+  );
+});
 const server = spawn("npm", ["run", "start", "--", "--port", "3100"], {
   env: {
     ...process.env,
@@ -40,7 +47,7 @@ try {
     chromePath: chromium.executablePath(),
     chromeFlags: ["--headless=new", "--no-sandbox", "--disable-gpu"],
   });
-  const result = await lighthouse(url, {
+  const result = await deadline(lighthouse(url, {
     port: chrome.port,
     logLevel: "info",
     output: "json",
@@ -48,7 +55,7 @@ try {
     formFactor: "mobile",
     screenEmulation: { mobile: true, width: 412, height: 915, deviceScaleFactor: 2, disabled: false },
     throttlingMethod: "simulate",
-  });
+  }), 120_000, "Lighthouse did not finish within 120 seconds.");
   const performance = Math.round((result?.lhr?.categories?.performance?.score ?? 0) * 100);
   const accessibility = Math.round((result?.lhr?.categories?.accessibility?.score ?? 0) * 100);
   console.log(`Lighthouse mobile: Performance ${performance}, Accessibility ${accessibility}`);
@@ -56,6 +63,9 @@ try {
     throw new Error(`Lighthouse gate failed: require Performance >= 90 and Accessibility >= 95; received ${performance} and ${accessibility}.`);
   }
 } finally {
-  await chrome?.kill();
+  if (chrome) await deadline(chrome.kill(), 5_000, "Chrome cleanup timed out.").catch(() => {});
   if (server.exitCode == null) server.kill("SIGTERM");
+  server.stdout.destroy();
+  server.stderr.destroy();
+  server.unref();
 }
