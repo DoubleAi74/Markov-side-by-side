@@ -22,6 +22,7 @@ export default defineConfig({
       ...process.env,
       AUTH_SECRET: process.env.AUTH_SECRET || "markov-lab-playwright-secret-do-not-use-outside-tests",
       AUTH_TRUST_HOST: "true",
+      MARKOV_LAB_E2E: "true",
     },
     reuseExistingServer: true,
     timeout: 120_000

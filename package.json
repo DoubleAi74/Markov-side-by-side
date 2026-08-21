@@ -15,6 +15,7 @@
     "test:vitest": "vitest run",
     "test:native": "node scripts/native-conformance.mjs",
     "test:e2e": "playwright test",
+    "test:lighthouse": "node scripts/lighthouse-gate.mjs",
     "benchmark": "node scripts/benchmark.mjs",
     "audit:security": "node scripts/security-audit.mjs"
   },
@@ -41,10 +42,12 @@
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.2",
     "axe-core": "^4.13.0",
+    "chrome-launcher": "^1.2.1",
     "eslint": "^9",
     "eslint-config-next": "^16.3.1",
     "fast-check": "^4.9.0",
     "jsdom": "^29.1.1",
+    "lighthouse": "^13.4.1",
     "tailwindcss": "^4",
     "vitest": "^4.1.10"
   }

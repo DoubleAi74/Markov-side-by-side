@@ -39,7 +39,9 @@ export const metadata = {
 };
 
 export default async function RootLayout({ children }) {
-  const session = await auth();
+  // Public browser tests intentionally run without production auth/database
+  // services. The explicit flag is set only by the Playwright web server.
+  const session = process.env.MARKOV_LAB_E2E === "true" ? null : await auth();
   const sessionUser = await buildSessionUser(session, { ensureUsername: true });
 
   return (
