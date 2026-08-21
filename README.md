@@ -58,12 +58,14 @@ npm run test:vitest
 npm run audit:security
 npm run build
 npm run benchmark
+npm run test:e2e
+npm run test:lighthouse
 ```
 
-The Playwright/axe harness is `npm run test:e2e`; install its Chromium, Firefox,
-and WebKit binaries first with `npx playwright install --with-deps`. CI performs
-that step. The release checklist records the mobile Lighthouse thresholds; run
-them in browser-enabled CI with a currently audited Lighthouse runner.
+Install Chromium, Firefox, and WebKit first with
+`npx playwright install --with-deps`. CI performs that step, runs the
+Playwright/axe matrix, and enforces mobile Lighthouse scores of Performance 90
+and Accessibility 95 with development-only audited tooling.
 
 ## Migration and retention
 

@@ -94,7 +94,9 @@ export default function SimChart({
 
   return (
     <div className="relative w-full h-full min-h-[280px] md:min-h-[400px]">
-      <canvas ref={canvasRef} />
+      <canvas ref={canvasRef} role="img" aria-label={`${yLabel} against ${xLabel} simulation chart`}>
+        Simulation chart. Use the Data table control for a text alternative.
+      </canvas>
     </div>
   );
 }

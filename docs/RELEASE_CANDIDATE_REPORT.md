@@ -1,6 +1,6 @@
 # Markov Lab release-candidate report
 
-Report date: 2026-08-20
+Report date: 2026-08-21
 
 This repository state is a local release candidate. It has not been deployed and
 has not been applied to a production database.
@@ -27,7 +27,11 @@ has not been applied to a production database.
   histogram/PMF/KDE/ECDF, scatter/hexbin, phase matrices, first-passage
   Kaplan–Meier, reaction/extinction/Fano/stoichiometry diagnostics,
   ACF/Welch diagnostics, provenance-aware PNG/CSV export, parameter sweeps,
-  centred sensitivity, and convergence assistants.
+  centred sensitivity, convergence assistants, ordered persistent plot-card
+  layouts, and individual/composite provenance-aware PNG export.
+- Structured transition naming, duplication and ordering; discoverable safe
+  expression symbols with equation previews; and a general SDE state-by-noise
+  diffusion matrix with named sources, correlations, and boundary policies.
 - Anonymous and public-sandbox run histories in bounded IndexedDB storage,
   client JSON v1/v2 import/export, strict browser SBML interchange, and
   keyboard-resizable desktop panes with local width persistence.
@@ -44,7 +48,7 @@ The following checks passed in this workspace on the report date:
 | Check | Result |
 | --- | --- |
 | Node scientific, API, execution, analysis, and workspace tests | 65/65 passed |
-| Vitest component and property tests | 5/5 passed |
+| Vitest component and property tests | 7/7 passed |
 | ESLint | Passed with no findings |
 | Runtime code-execution security audit | Passed |
 | npm dependency audit at moderate severity | 0 vulnerabilities |
@@ -69,29 +73,13 @@ backend gates, and preview revision binding.
   yet proves at least 1.5x end-to-end improvement within the memory limit.
 - Experimental WebGPU is not exposed because no f64 calibration and ten-million
   update benchmark proves its statistical and 3x performance gates.
-- The local in-app browser provider reported no available browser. The Playwright,
-  axe, mobile, and Lighthouse configurations are checked in, but their rendered
-  cross-browser results and the Performance 90 / Accessibility 95 thresholds must
-  be confirmed in browser-enabled CI before promotion.
+- The local in-app browser provider reported no available browser. The checked-in
+  CI workflow runs Chromium, Firefox, WebKit, mobile Chromium, axe, and an audited
+  Lighthouse mobile gate requiring Performance 90 / Accessibility 95; its remote
+  result remains a promotion gate until the committed workflow completes.
 - Linux native compilation and the same checked-in f64 conformance command run
   in the Ubuntu CI workflow, but the remote Linux job remains a promotion gate
   until that workflow completes on the committed candidate.
-
-## Product surfaces not claimed by this candidate
-
-The following deep-editor and presentation surfaces remain explicit follow-up
-work rather than hidden or partially advertised features:
-
-- repeatable multi-card plot layouts and one composite all-plot PNG (every
-  individual plot/table currently exports a provenance-labelled PNG);
-- equation autocomplete/previews and the remaining fully structured
-  transition/noise-matrix controls. Units, descriptions, labels, non-autorun
-  sliders, stable identities, and Guided/Expert canonical round trips are
-  implemented.
-
-These omissions are stated explicitly because passing library tests is not the
-same as shipping an accessible product workflow. They must be implemented and
-re-audited before describing the entire long-range overhaul as complete.
 
 These are promotion gates, not silent fallbacks. The product continues to use
 the JavaScript worker f64 backend, and large raw jobs require an explicit change

@@ -905,6 +905,7 @@ export default function CTMPInhomoSimulator({
                 <div className="order-2 flex items-center gap-2 flex-nowrap whitespace-nowrap max-w-full overflow-x-auto">
                   <label className="text-[11px] text-slate-500">t max</label>
                   <input
+                    aria-label="Maximum simulation time"
                     type="number"
                     value={tMax}
                     step="any"
@@ -914,6 +915,7 @@ export default function CTMPInhomoSimulator({
 
                   <label className="text-[11px] text-slate-500">dt</label>
                   <input
+                    aria-label="Maximum integration step"
                     type="number"
                     value={dt}
                     step="0.0001"
@@ -923,6 +925,7 @@ export default function CTMPInhomoSimulator({
 
                   <label className="text-[11px] text-slate-500">runs</label>
                   <input
+                    aria-label="Number of simulation runs"
                     type="number"
                     value={numSims}
                     min="1"

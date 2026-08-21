@@ -2,6 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  reporter: process.env.CI ? [["github"], ["line"]] : "list",
   timeout: 60_000,
   expect: { timeout: 15_000 },
   use: {
@@ -16,7 +17,7 @@ export default defineConfig({
     { name: "mobile-chromium", use: { ...devices["Pixel 7"] } }
   ],
   webServer: {
-    command: "npm run dev -- --port 3100",
+    command: "npm run start -- --port 3100",
     url: "http://127.0.0.1:3100",
     env: {
       ...process.env,
@@ -24,7 +25,7 @@ export default defineConfig({
       AUTH_TRUST_HOST: "true",
       MARKOV_LAB_E2E: "true",
     },
-    reuseExistingServer: true,
+    reuseExistingServer: !process.env.CI,
     timeout: 120_000
   }
 });

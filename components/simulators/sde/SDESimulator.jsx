@@ -740,6 +740,7 @@ export default function SDESimulator({
                       {component.noteEnabled && (
                         <div className="mb-[2px] flex justify-end">
                           <input
+                            aria-label={`Display label for variable ${index + 1}`}
                             type="text"
                             value={component.noteLabel ?? ""}
                             size={Math.max(
@@ -787,6 +788,7 @@ export default function SDESimulator({
                         {/* Variable Column */}
                         <div className="flex flex-col flex-1">
                           <input
+                            aria-label={`Variable ${index + 1} name`}
                             type="text"
                             value={component.name}
                             onChange={(event) =>
@@ -805,6 +807,7 @@ export default function SDESimulator({
                         {/* Initial Value Column */}
                         <div className="flex flex-col w-[80px] sm:w-[110px]">
                           <input
+                            aria-label={`Initial value for ${component.name || `variable ${index + 1}`}`}
                             type="number"
                             value={component.init}
                             onChange={(event) =>
@@ -1014,6 +1017,7 @@ export default function SDESimulator({
               <div className="order-2 flex items-center gap-2 flex-nowrap whitespace-nowrap max-w-full overflow-x-auto">
                 <label className="text-[11px] text-slate-500">t max</label>
                 <input
+                  aria-label="Maximum simulation time"
                   type="number"
                   value={tMax}
                   step="any"
@@ -1023,6 +1027,7 @@ export default function SDESimulator({
 
                 <label className="text-[11px] text-slate-500">dt</label>
                 <input
+                  aria-label="SDE time step"
                   type="number"
                   value={dt}
                   step="0.001"
@@ -1032,6 +1037,7 @@ export default function SDESimulator({
 
                 <label className="text-[11px] text-slate-500">runs</label>
                 <input
+                  aria-label="Number of simulation runs"
                   type="number"
                   value={numSims}
                   min="1"
