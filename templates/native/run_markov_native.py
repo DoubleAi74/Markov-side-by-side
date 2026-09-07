@@ -349,18 +349,6 @@ def require_positive_integer(value, context: str):
     return numeric
 
 
-def require_uint64(value, context: str):
-    if isinstance(value, bool):
-        raise ConfigError(f"{context} must be a uint64 decimal value.")
-    try:
-        numeric = int(value)
-    except (TypeError, ValueError):
-        raise ConfigError(f"{context} must be a uint64 decimal value.")
-    if numeric < 0 or numeric > (1 << 64) - 1:
-        raise ConfigError(f"{context} must be between 0 and 18446744073709551615.")
-    return numeric
-
-
 def normalize_expression_text(value, context: str):
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         if not math.isfinite(float(value)):
@@ -532,11 +520,10 @@ def compile_ast(node, *, variable_index, parameter_index, helper_index, allow_st
 
 def normalize_base_config(config):
     config = require_object(config, "Config")
-    if config.get("format") not in {"markov-lab/native-config", "markov-side-by-side/model-config"}:
+    if config.get("format") != "markov-side-by-side/model-config":
         raise ConfigError("Config format is not supported.")
-    expected_version = 2 if config.get("format") == "markov-lab/native-config" else 1
-    if int(config.get("formatVersion")) != expected_version:
-        raise ConfigError(f"Config formatVersion must be {expected_version}.")
+    if int(config.get("formatVersion")) != 1:
+        raise ConfigError("Config formatVersion must be 1.")
 
     simulator_type = require_string(config.get("simulatorType"), "simulatorType")
     if simulator_type not in SIMULATOR_TYPES:
@@ -549,7 +536,7 @@ def normalize_base_config(config):
         "num_simulations": require_positive_integer(
             run.get("numSimulations"), "run.numSimulations"
         ),
-        "seed": require_uint64(run.get("seed"), "run.seed"),
+        "seed": require_positive_integer(run.get("seed"), "run.seed"),
         "csv_filename": require_string(
             require_object(run.get("csv"), "run.csv").get("filename"),
             "run.csv.filename",
@@ -790,11 +777,7 @@ def build_compiled_model(normalized_config):
                     variable_index=variable_index,
                     parameter_index=parameter_index,
                     helper_index=helper_index,
-                    # Canonical helpers share the same symbol environment as
-                    # transition expressions. The C++ VM receives the current
-                    # state when it evaluates a helper, so retaining state
-                    # references here keeps native and browser semantics equal.
-                    allow_state=True,
+                    allow_state=False,
                 )
             )
         )
@@ -1111,7 +1094,7 @@ def run_native_binary(
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        description="Compile and run the Markov Lab native runner."
+        description="Compile and run the Markov Side-by-Side native runner."
     )
     parser.add_argument("--config", required=True, help="Path to exported model JSON.")
     parser.add_argument("--output", help="CSV output path.")
@@ -1141,7 +1124,8 @@ def main(argv=None):
 
         if args.threads is not None and args.threads <= 0:
             raise ConfigError("--threads must be a positive integer.")
-        runtime_seed = require_uint64(runtime_seed, "--seed")
+        if runtime_seed <= 0:
+            raise ConfigError("--seed must be a positive integer.")
         if runtime_runs <= 0:
             raise ConfigError("--runs must be a positive integer.")
 

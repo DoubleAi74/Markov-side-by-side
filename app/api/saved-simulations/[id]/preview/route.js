@@ -14,7 +14,6 @@ import {
   getSavedSimulationPreviewPublicUrl,
   uploadSavedSimulationPreview,
 } from "@/lib/storage/r2";
-import { internalErrorResponse } from "@/lib/http/internal-error";
 
 export const runtime = "nodejs";
 
@@ -53,24 +52,9 @@ export async function PUT(request, { params }) {
         { status: 404 },
       );
     }
-    if (existing.visibility === "private") {
-      return NextResponse.json(
-        { error: "Private models cannot use a publicly delivered preview." },
-        { status: 409 },
-      );
-    }
 
     const body = await readJson(request);
     const previewUpload = validateSavedSimulationPreviewUploadInput(body);
-    if (
-      existing.revision !== previewUpload.expectedRevision ||
-      existing.definitionHash !== previewUpload.expectedDefinitionHash
-    ) {
-      return NextResponse.json(
-        { error: "The model changed before its preview could be attached.", code: "STALE_PREVIEW" },
-        { status: 409 },
-      );
-    }
     const objectKey = buildSavedSimulationPreviewObjectKey({
       userId: sessionUser.id,
       simulatorType: existing.simulatorType,
@@ -86,24 +70,16 @@ export async function PUT(request, { params }) {
 
     let updated;
     try {
-      updated = await updateSavedSimulationPreviewForUser(
-        id,
-        sessionUser.id,
-        {
-          imageUrl: getSavedSimulationPreviewPublicUrl(objectKey),
-          blurDataURL: previewUpload.blurDataURL,
-          objectKey,
-          width: previewUpload.width,
-          height: previewUpload.height,
-          format: previewUpload.format,
-          fileSize: previewUpload.fileSize,
-          generatedAt: new Date(),
-        },
-        {
-          expectedRevision: previewUpload.expectedRevision,
-          expectedDefinitionHash: previewUpload.expectedDefinitionHash,
-        },
-      );
+      updated = await updateSavedSimulationPreviewForUser(id, sessionUser.id, {
+        imageUrl: getSavedSimulationPreviewPublicUrl(objectKey),
+        blurDataURL: previewUpload.blurDataURL,
+        objectKey,
+        width: previewUpload.width,
+        height: previewUpload.height,
+        format: previewUpload.format,
+        fileSize: previewUpload.fileSize,
+        generatedAt: new Date(),
+      });
     } catch (error) {
       deleteSavedSimulationPreviewObject(objectKey).catch(() => {});
       throw error;
@@ -112,8 +88,8 @@ export async function PUT(request, { params }) {
     if (!updated) {
       deleteSavedSimulationPreviewObject(objectKey).catch(() => {});
       return NextResponse.json(
-        { error: "The model changed before its preview could be attached.", code: "STALE_PREVIEW" },
-        { status: 409 },
+        { error: "Saved simulation not found." },
+        { status: 404 },
       );
     }
 
@@ -132,6 +108,9 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    return internalErrorResponse(error, "Failed to upload saved simulation preview.");
+    return NextResponse.json(
+      { error: error.message || "Failed to upload saved simulation preview." },
+      { status: 500 },
+    );
   }
 }

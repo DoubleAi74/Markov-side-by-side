@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { getNativeBundleFilename } from "@/lib/exports/config";
 import { createNativeBundle } from "@/lib/exports/native-bundle";
 import { getPublicSavedSimulationByUsernameAndSlug } from "@/lib/saved-simulations/service";
-import { internalErrorResponse } from "@/lib/http/internal-error";
 
 export const runtime = "nodejs";
 
@@ -32,6 +31,9 @@ export async function GET(_request, { params }) {
       },
     });
   } catch (error) {
-    return internalErrorResponse(error, "Failed to export public native bundle.");
+    return NextResponse.json(
+      { error: error.message || "Failed to export public native bundle." },
+      { status: 500 },
+    );
   }
 }

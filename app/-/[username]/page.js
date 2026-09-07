@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { buildSessionUser } from "@/lib/auth/session-user";
-import { listPublicSavedSimulationsByUsername, listSavedSimulationsForUser } from "@/lib/saved-simulations/service";
+import { listPublicSavedSimulationsByUsername } from "@/lib/saved-simulations/service";
 import { normalizeUsernameSlug } from "@/lib/slugs";
 import UserDashboardShell from "@/components/dashboard/UserDashboardShell";
 
@@ -37,14 +37,11 @@ export default async function UserDashboardPage({ params }) {
   const isOwner = Boolean(
     sessionUser?.id && sessionUser.id === publicDashboard.owner.id,
   );
-  const initialItems = isOwner
-    ? await listSavedSimulationsForUser(sessionUser.id)
-    : publicDashboard.items;
 
   return (
     <UserDashboardShell
       ownerUsername={publicDashboard.owner.username}
-      initialItems={initialItems}
+      initialItems={publicDashboard.items}
       isOwner={isOwner}
       sessionEmail={isOwner ? sessionUser.email : null}
     />

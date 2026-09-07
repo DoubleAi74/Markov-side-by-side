@@ -1,4 +1,4 @@
-# Markov Lab Native Runner Bundle
+# Native Runner Bundle
 
 This bundle contains:
 
@@ -94,22 +94,15 @@ python3 -m pip install matplotlib
 
 - If you run the bundle from `Downloads` and see `PermissionError`, move the extracted bundle to a normal project folder such as `~/Projects/markov-native`, or grant your IDE and Python interpreter access in `System Settings > Privacy & Security`.
 
-## Numerical and provenance notes
+## Exactness Notes
 
 The native runner is designed to match the web app's simulation algorithms and semantics:
 
-- Gillespie: direct SSA with deterministic per-run seed derivation
-- Migrated CTMP: compatibility method with an explicit maximum rate-freezing interval
-- SDE: Euler–Maruyama on an f64 CPU reference path
+- Gillespie: exact SSA logic
+- CTMP inhomogeneous: same fixed-step method
+- SDE: same Euler-Maruyama method
 
-The JSON configuration and CSV should be retained together. The configuration
-records the model definition, root seed, solver choice, and export format. A run
-index is deterministically mixed into the root seed, so thread scheduling does
-not choose a trajectory.
-
-The JavaScript f64 runtime remains the scientific reference. Floating-point
-implementations may prevent bitwise identity across every browser/compiler pair;
-conformance should therefore check seeded vectors, invariants, and tolerances.
+This does not guarantee bitwise identity with browser trajectories across all environments.
 
 ## Performance Notes
 

@@ -20,12 +20,6 @@ export default function SaveModelControls({
   exportUsername = null,
   exportSlug = null,
   canEditCurrentModel = true,
-  initialDescription = "",
-  initialTags = [],
-  initialVisibility = "public",
-  initialRevision = 1,
-  sourceModelId = null,
-  previewIsFresh = false,
   getPayload,
   getPreviewChart,
   onSaved,
@@ -37,11 +31,6 @@ export default function SaveModelControls({
   const [pendingAction, setPendingAction] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [description, setDescription] = useState(initialDescription || "");
-  const [tagsText, setTagsText] = useState(Array.isArray(initialTags) ? initialTags.join(", ") : "");
-  const [visibility, setVisibility] = useState(initialVisibility === "private" ? "private" : "public");
-  const [currentRevision, setCurrentRevision] = useState(Number(initialRevision) || 1);
-  const [conflict, setConflict] = useState(null);
   const { enqueuePreviewUpload } = usePreviewUploadQueue();
 
   useEffect(() => {
@@ -50,14 +39,6 @@ export default function SaveModelControls({
       mountedRef.current = false;
     };
   }, []);
-
-  useEffect(() => {
-    setDescription(initialDescription || "");
-    setTagsText(Array.isArray(initialTags) ? initialTags.join(", ") : "");
-    setVisibility(initialVisibility === "private" ? "private" : "public");
-    setCurrentRevision(Number(initialRevision) || 1);
-    setConflict(null);
-  }, [initialDescription, initialRevision, initialTags, initialVisibility, savedSimulationId]);
 
   const callbackPath = buildCallbackPath(pathname, searchParams);
   const loginHref = `/login?callbackUrl=${encodeURIComponent(callbackPath)}`;
@@ -76,7 +57,7 @@ export default function SaveModelControls({
     : null;
 
   const updateBrowserUrl = (savedSimulation) => {
-    if (savedSimulation?.visibility !== "private" && sessionUser?.username && savedSimulation?.slug) {
+    if (sessionUser?.username && savedSimulation?.slug) {
       router.replace(
         `/-/${encodeURIComponent(sessionUser.username)}/${encodeURIComponent(savedSimulation.slug)}`,
         { scroll: false },
@@ -88,8 +69,9 @@ export default function SaveModelControls({
       return;
     }
 
-    const route = simulatorType === "ctmp-inhomo" ? "/ctmp-inhomo" : simulatorType === "sde" ? "/sde" : "/gillespie";
-    router.replace(`${route}?model=${encodeURIComponent(savedSimulation.id)}`, { scroll: false });
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.set("model", savedSimulation.id);
+    router.replace(`${pathname}?${nextParams.toString()}`, { scroll: false });
   };
 
   const persistSimulation = async (mode) => {
@@ -103,83 +85,50 @@ export default function SaveModelControls({
     setPendingAction(mode);
     setError("");
     setSuccess("");
-    setConflict(null);
 
     try {
       const serialized = getPayload();
       const isCreate = mode === "create";
       const isUpdateRequest = !isCreate && canEditExistingModel;
-      const isFork = isCreate && Boolean(sourceModelId) && !canEditCurrentModel;
-      const shouldUploadPreview = previewIsFresh;
-      const metadata = {
-        name: trimmedName,
-        description: description.trim(),
-        tags: tagsText.split(",").map((tag) => tag.trim()).filter(Boolean),
-        visibility,
-      };
+      const shouldUploadPreview = mode === "create" || mode === "image";
       const body = isUpdateRequest
         ? {
-            ...metadata,
-            expectedRevision: currentRevision,
+            name: trimmedName,
             payloadVersion: serialized.payloadVersion,
             payload: serialized.payload,
           }
         : {
-            ...metadata,
+            name: trimmedName,
+            description: "",
             simulatorType,
             payloadVersion: serialized.payloadVersion,
             payload: serialized.payload,
           };
 
-      let response = await fetch(
-        isFork
-          ? `/api/saved-simulations/${sourceModelId}/fork`
-          : isUpdateRequest
-            ? `/api/saved-simulations/${savedSimulationId}`
-            : "/api/saved-simulations",
+      const response = await fetch(
+        isUpdateRequest
+          ? `/api/saved-simulations/${savedSimulationId}`
+          : "/api/saved-simulations",
         {
           method: isUpdateRequest ? "PATCH" : "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(isFork ? { name: trimmedName, visibility } : body),
+          body: JSON.stringify(body),
         },
       );
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        if (response.status === 409) {
-          setConflict({ currentRevision: data.currentRevision });
-        }
         throw new Error(data.error || "Failed to save simulation.");
       }
 
-      let saved = await response.json();
-      if (isFork) {
-        response = await fetch(`/api/saved-simulations/${saved.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ...metadata,
-            expectedRevision: saved.revision,
-            payloadVersion: serialized.payloadVersion,
-            payload: serialized.payload,
-          }),
-        });
-        if (!response.ok) {
-          const data = await response.json().catch(() => ({}));
-          throw new Error(data.error || "The fork was created, but local edits could not be applied.");
-        }
-        saved = await response.json();
-      }
-      setCurrentRevision(Number(saved.revision) || currentRevision);
+      const saved = await response.json();
       const previewChart = shouldUploadPreview ? getPreviewChart?.() : null;
       if (previewChart) {
         enqueuePreviewUpload({
           savedSimulationId: saved.id,
           chart: previewChart,
-          expectedRevision: saved.revision,
-          expectedDefinitionHash: saved.definitionHash,
         });
       }
 
@@ -188,8 +137,10 @@ export default function SaveModelControls({
         updateBrowserUrl(saved);
         setSuccess(
           mode === "create"
-            ? shouldUploadPreview ? "Saved new model. Preview uploading in background." : "Saved new model. Run it to create a fresh preview."
-            : shouldUploadPreview ? "Saved changes. Preview uploading in background." : "Saved changes. Preview was not updated because results are stale.",
+            ? "Saved new model. Preview uploading in background."
+            : mode === "image"
+              ? "Saved changes. Preview uploading in background."
+              : "Saved changes.",
         );
       }
     } catch (saveError) {
@@ -266,11 +217,7 @@ export default function SaveModelControls({
                 disabled={pendingAction !== ""}
                 className="rounded bg-blue-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {pendingAction === "create"
-                  ? "Saving..."
-                  : savedSimulationId
-                    ? canEditCurrentModel ? "Save as copy" : "Fork to my models"
-                    : "Save model"}
+                {pendingAction === "create" ? "Saving..." : "Save New"}
               </button>
 
               {canEditExistingModel && (
@@ -278,24 +225,23 @@ export default function SaveModelControls({
                   <button
                     type="button"
                     onClick={() => persistSimulation("update")}
-                    disabled={pendingAction !== "" || Boolean(conflict)}
+                    disabled={pendingAction !== ""}
                     className="rounded border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {pendingAction === "update" ? "Saving..." : "Save changes"}
+                    {pendingAction === "update" ? "Updating..." : "Update"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => persistSimulation("image")}
+                    disabled={pendingAction !== ""}
+                    className="rounded border border-blue-800 px-3 py-2 text-sm font-medium text-blue-900 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {pendingAction === "image" ? "Setting Image..." : "Set Image"}
                   </button>
                 </>
               )}
             </div>
           </div>
-
-          <details className="model-metadata">
-            <summary>Sharing and metadata</summary>
-            <div className="model-metadata-grid">
-              <label><span>Description</span><textarea rows="2" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="What question does this model investigate?" /></label>
-              <label><span>Tags</span><input type="text" value={tagsText} onChange={(event) => setTagsText(event.target.value)} placeholder="ecology, first passage" /></label>
-              <fieldset><legend>Visibility</legend><label><input type="radio" name={`${simulatorType}-visibility`} value="public" checked={visibility === "public"} onChange={() => setVisibility("public")} /> Public</label><label><input type="radio" name={`${simulatorType}-visibility`} value="private" checked={visibility === "private"} onChange={() => setVisibility("private")} /> Private</label></fieldset>
-            </div>
-          </details>
 
           <div className="flex flex-col gap-1 text-xs md:flex-row md:items-center md:justify-between">
             <span className="text-slate-500">
@@ -307,16 +253,6 @@ export default function SaveModelControls({
               {!error && success && <span className="text-emerald-700">{success}</span>}
             </div>
           </div>
-
-          {conflict && (
-            <div className="revision-conflict" role="alert">
-              <p>This model changed elsewhere (latest revision {conflict.currentRevision ?? "unknown"}). Your local work has not been overwritten.</p>
-              <div>
-                <button type="button" onClick={() => window.location.reload()}>Reload latest</button>
-                <button type="button" onClick={() => persistSimulation("create")}>Save local work as copy</button>
-              </div>
-            </div>
-          )}
 
           {exportBaseHref && (
             <div className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600 md:flex-row md:items-center md:justify-between">

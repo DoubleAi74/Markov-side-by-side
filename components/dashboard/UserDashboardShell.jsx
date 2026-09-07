@@ -42,16 +42,17 @@ export default function UserDashboardShell({
   }, [isOwner, profileUsername, router]);
 
   return (
-    <div className="dashboard-shell mx-auto w-full max-w-[1400px] px-4 py-8 md:py-12 space-y-6">
-      <header className="dashboard-heading space-y-1">
-        <p className="eyebrow">{isOwner ? "Your research workspace" : "Public model collection"}</p>
-        <h1>@{profileUsername}</h1>
+    <div className="mx-auto w-full max-w-[1400px] px-4 py-8 md:py-12 space-y-6">
+      <header className="space-y-1">
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+          @{profileUsername}
+        </h1>
         {isOwner && sessionEmail ? (
           <p className="text-sm text-slate-500">
-            Models, forks, and reproducible starting points · signed in as {sessionEmail}
+            Signed in as {sessionEmail}
           </p>
         ) : (
-          <p className="text-sm text-slate-500">Public stochastic models shared for inspection and reuse.</p>
+          <p className="text-sm text-slate-500">Saved simulations</p>
         )}
       </header>
 

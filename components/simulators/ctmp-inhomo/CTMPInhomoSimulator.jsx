@@ -1,20 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import ScientificPlotLab from "../shared/ScientificPlotLab";
-import WorkspaceHeader from "../shared/WorkspaceHeader";
-import { createRootSeed } from "@/lib/simulation/rng";
-import {
-  buildResultProvenance,
-  canonicalModelFromSerialized,
-  createCanonicalCoordinator,
-  datasetsFromRuns,
-  formatStructuredError,
-  makeClientNamespace,
-  makeSimulationRequest,
-  persistBoundedRunHistory,
-  resultIssues,
-} from "../shared/canonicalSimulation";
+import SimChart from "../shared/SimChart";
 import ExpressionListSection from "../shared/ExpressionListSection";
 import SaveModelControls from "../shared/SaveModelControls";
 import {
@@ -22,10 +9,17 @@ import {
   createSimulationResultsFilename,
   downloadCsvText,
 } from "../shared/resultsCsv";
-import { CTMP_INHOMO_SERIES_COLORS, getSeriesColor } from "../shared/seriesColors";
+import {
+  CTMP_INHOMO_SERIES_COLORS,
+  getSeriesColor,
+  hexToRgba,
+} from "../shared/seriesColors";
+import { Transition, TimeStepper } from "./engine";
+import { buildHelperBlock, compileExpression } from "@/lib/compile";
 import {
   assignmentsToText,
   helpersToText,
+  parseHelperLines,
   parseNameValueLines,
 } from "@/lib/modelParsers";
 import {
@@ -33,34 +27,12 @@ import {
   serializeCTMPInhomoState,
 } from "@/lib/saved-simulations/serializers";
 import { X } from "lucide-react";
-import RunHistoryPanel from "../shared/RunHistoryPanel";
-import { DraftRecoveryBanner, useWorkspaceDraft } from "../shared/WorkspaceDraft";
-import WorkspaceHistoryControls, { useWorkspaceHistory } from "../shared/WorkspaceHistoryControls";
-import ParameterSweepPanel from "../shared/ParameterSweepPanel";
-import ConvergenceAssistant from "../shared/ConvergenceAssistant";
-import { createLocalRunRecord, saveLocalRun } from "@/lib/workspace/local-runs";
-import WorkspaceInterchange from "../shared/WorkspaceInterchange";
-import WorkspaceResizeHandle, { useResizableEditor } from "../shared/WorkspaceResizeHandle";
-import ScientificExpressionInput from "../shared/ScientificExpressionInput";
 
 const TAB_ITEMS = [
   { id: "vars", label: "Variables" },
   { id: "params", label: "Parameters" },
   { id: "transitions", label: "Transitions" },
 ];
-const DEFAULT_PLOT_SPECS = [{ id: "plot-time-1", kind: "time" }];
-
-function handleTabKey(event, index, setActiveTab) {
-  let next = index;
-  if (event.key === "ArrowRight") next = (index + 1) % TAB_ITEMS.length;
-  else if (event.key === "ArrowLeft") next = (index - 1 + TAB_ITEMS.length) % TAB_ITEMS.length;
-  else if (event.key === "Home") next = 0;
-  else if (event.key === "End") next = TAB_ITEMS.length - 1;
-  else return;
-  event.preventDefault();
-  setActiveTab(TAB_ITEMS[next].id);
-  event.currentTarget.parentElement?.querySelectorAll('[role="tab"]')[next]?.focus();
-}
 
 const PRESETS = {
   seasonal: {
@@ -87,13 +59,12 @@ const PRESETS = {
 };
 
 function makeId() {
-  return makeClientNamespace("ctmp-row");
+  return Math.random().toString(36).slice(2);
 }
 
 function withTransitionIds(transitions, varCount) {
-  return transitions.map((transition, index) => ({
+  return transitions.map((transition) => ({
     id: makeId(),
-    name: transition.name ?? `Transition ${index + 1}`,
     rate: transition.rate,
     deltas: Array.from({ length: varCount }, (_, idx) =>
       String(transition.deltas?.[idx] ?? 0),
@@ -156,13 +127,6 @@ export default function CTMPInhomoSimulator({
     [initialSavedSimulation],
   );
   const [activeTab, setActiveTab] = useState("vars");
-  const [editorMode, setEditorMode] = useState("guided");
-  const [mobileView, setMobileView] = useState("editor");
-  const [retentionMode, setRetentionMode] = useState("raw");
-  const [plotSpecs, setPlotSpecs] = useState(() => initialSavedPayload?.plots?.length ? initialSavedPayload.plots : DEFAULT_PLOT_SPECS);
-  const [rootSeed, setRootSeed] = useState(
-    initialSavedPayload?.settings?.seed ?? "7640891576956012809",
-  );
   const [varRows, setVarRows] = useState(() =>
     initialSavedPayload?.varRows ??
     textToRows(assignmentsToText(PRESETS.seasonal.vars)),
@@ -193,7 +157,6 @@ export default function CTMPInhomoSimulator({
     initialSavedPayload?.settings?.numSims ?? 1,
   );
   const [running, setRunning] = useState(false);
-  const [progress, setProgress] = useState({ completed: 0, total: 0 });
   const [error, setError] = useState("");
   const [warning, setWarning] = useState("");
   const [stats, setStats] = useState("");
@@ -207,26 +170,10 @@ export default function CTMPInhomoSimulator({
   );
   const resultsCsvRef = useRef(null);
   const [hasResultsCsv, setHasResultsCsv] = useState(false);
-  const coordinatorRef = useRef(null);
-  const activeJobRef = useRef(null);
-  const modelNamespaceRef = useRef(
-    initialSavedSimulation?.id ?? makeClientNamespace("ctmp"),
-  );
-  const [resultProvenance, setResultProvenance] = useState(null);
-  const [historyRefresh, setHistoryRefresh] = useState(0);
-  const editorPane = useResizableEditor("markov-lab:ctmp-inhomo:editor-width", 500);
-
-  useEffect(() => {
-    if (!initialSavedPayload?.settings?.seed) setRootSeed(createRootSeed());
-  }, [initialSavedPayload?.settings?.seed]);
-
-  useEffect(() => () => activeJobRef.current?.cancel?.(), []);
 
   const varsText = useMemo(() => rowsToText(varRows), [varRows]);
   const paramsText = useMemo(() => rowsToText(paramRows), [paramRows]);
   const helpersText = useMemo(() => rowsToText(helperRows), [helperRows]);
-  const runInputSignature = useMemo(() => JSON.stringify({ varsText, paramsText, helpersText, transitions, tMax, dt, numSims, rootSeed }), [varsText, paramsText, helpersText, transitions, tMax, dt, numSims, rootSeed]);
-  const lastRunSignatureRef = useRef("");
 
   const variableNamesPreview = useMemo(() => {
     try {
@@ -235,11 +182,6 @@ export default function CTMPInhomoSimulator({
       return [];
     }
   }, [varsText]);
-  const expressionSymbols = useMemo(() => [
-    ...variableNamesPreview,
-    ...paramRows.map((row) => String(row.text ?? "").match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/)?.[1]).filter(Boolean),
-    ...helperRows.map((row) => String(row.text ?? "").match(/^\s*([A-Za-z_][A-Za-z0-9_]*)/)?.[1]).filter(Boolean),
-  ], [helperRows, paramRows, variableNamesPreview]);
 
   const legendItems = useMemo(
     () =>
@@ -283,7 +225,6 @@ export default function CTMPInhomoSimulator({
       ...items,
       {
         id: makeId(),
-        name: `Transition ${items.length + 1}`,
         rate: "",
         deltas: Array.from({ length: variableNamesPreview.length }, () => "0"),
         noteEnabled: false,
@@ -299,7 +240,6 @@ export default function CTMPInhomoSimulator({
       return [
         {
           id: makeId(),
-          name: "Transition 1",
           rate: "",
           deltas: Array.from(
             { length: variableNamesPreview.length },
@@ -311,19 +251,6 @@ export default function CTMPInhomoSimulator({
       ];
     });
   };
-
-  const duplicateTransition = (id) => setTransitions((items) => {
-    const index = items.findIndex((item) => item.id === id);
-    if (index < 0) return items;
-    const source = items[index];
-    return [...items.slice(0, index + 1), { ...source, id: makeId(), name: `${source.name || `Transition ${index + 1}`} copy`, deltas: [...source.deltas] }, ...items.slice(index + 1)];
-  });
-
-  const moveTransition = (id, direction) => setTransitions((items) => {
-    const index = items.findIndex((item) => item.id === id), target = index + direction;
-    if (index < 0 || target < 0 || target >= items.length) return items;
-    const next = [...items]; [next[index], next[target]] = [next[target], next[index]]; return next;
-  });
 
   const toggleTransitionNote = (id) => {
     setTransitions((items) =>
@@ -371,7 +298,6 @@ export default function CTMPInhomoSimulator({
     setParamRows(textToRows(assignmentsToText(preset.params)));
     setHelperRows(textToRows(helpersToText(preset.helpers)));
     setTransitions(withTransitionIds(preset.transitions, preset.vars.length));
-    setPlotSpecs(DEFAULT_PLOT_SPECS);
     setTMax(preset.tMax);
     setDt(preset.dt);
     setNumSims(1);
@@ -391,11 +317,9 @@ export default function CTMPInhomoSimulator({
     setParamRows(hydrated.paramRows);
     setHelperRows(hydrated.helperRows);
     setTransitions(hydrated.transitions);
-    setPlotSpecs(hydrated.plots?.length ? hydrated.plots : DEFAULT_PLOT_SPECS);
     setTMax(hydrated.settings.tMax);
     setDt(hydrated.settings.dt);
     setNumSims(hydrated.settings.numSims);
-    setRootSeed(hydrated.settings.seed || createRootSeed());
     setSavedSimulationId(savedSimulation.id);
     setModelName(savedSimulation.name ?? "");
     setError("");
@@ -422,60 +346,9 @@ export default function CTMPInhomoSimulator({
         tMax,
         dt,
         numSims,
-        seed: rootSeed,
-        plots: plotSpecs,
       }),
-    [dt, helperRows, numSims, paramRows, plotSpecs, rootSeed, tMax, transitions, varRows],
+    [dt, helperRows, numSims, paramRows, tMax, transitions, varRows],
   );
-
-  const buildAnalysisModel = useCallback(
-    (runs = 1) => canonicalModelFromSerialized(buildSavePayload(), {
-      simulatorType: "ctmp-inhomo",
-      seed: rootSeed,
-      runs,
-      namespace: savedSimulationId ?? modelNamespaceRef.current,
-    }),
-    [buildSavePayload, rootSeed, savedSimulationId],
-  );
-
-  const loadSweepCell = useCallback((assignments) => {
-    setParamRows((rows) => rows.map((row) => {
-      const match = String(row.text ?? "").match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/);
-      return match && Object.hasOwn(assignments, match[1])
-        ? { ...row, text: `${match[1]} = ${assignments[match[1]]}` }
-        : row;
-    }));
-    setMobileView("editor");
-    window.setTimeout(() => document.getElementById("ctmp-inhomo-run")?.click(), 25);
-  }, []);
-
-  const importModel = useCallback((model) => {
-    const hydrated = hydrateCTMPInhomoPayload(model);
-    setVarRows(hydrated.varRows); setParamRows(hydrated.paramRows); setHelperRows(hydrated.helperRows); setTransitions(hydrated.transitions); setPlotSpecs(hydrated.plots?.length ? hydrated.plots : DEFAULT_PLOT_SPECS);
-    setTMax(hydrated.settings.tMax); setDt(hydrated.settings.dt); setNumSims(hydrated.settings.numSims); setRootSeed(hydrated.settings.seed || createRootSeed());
-    setSavedSimulationId(null); setModelName(""); setError(""); setWarning(""); setStats(""); setChartDatasets([]); setChartXMax(undefined); clearResultsCsv(); setMobileView("editor");
-  }, [clearResultsCsv]);
-
-  const draftSnapshot = useMemo(() => ({ varRows, paramRows, helperRows, transitions, plotSpecs, tMax, dt, numSims, rootSeed, modelName }), [dt, helperRows, modelName, numSims, paramRows, plotSpecs, rootSeed, tMax, transitions, varRows]);
-  const restoreDraft = useCallback((snapshot) => {
-    setVarRows(snapshot.varRows);
-    setParamRows(snapshot.paramRows);
-    setHelperRows(snapshot.helperRows);
-    setTransitions(snapshot.transitions);
-    setPlotSpecs(snapshot.plotSpecs?.length ? snapshot.plotSpecs : DEFAULT_PLOT_SPECS);
-    setTMax(snapshot.tMax);
-    setDt(snapshot.dt);
-    setNumSims(snapshot.numSims);
-    setRootSeed(snapshot.rootSeed);
-    setModelName(snapshot.modelName ?? "");
-    setError(""); setWarning(""); setStats(""); setChartDatasets([]); setChartXMax(undefined); clearResultsCsv();
-  }, [clearResultsCsv]);
-  const workspaceDraft = useWorkspaceDraft({
-    draftKey: `ctmp-inhomo:${savedSimulationId ?? "anonymous"}`,
-    snapshot: draftSnapshot,
-    onRestore: restoreDraft,
-  });
-  const workspaceHistory = useWorkspaceHistory({ snapshot: draftSnapshot, onApply: restoreDraft });
 
   const buildPreviewChart = useCallback(
     () => ({
@@ -489,115 +362,184 @@ export default function CTMPInhomoSimulator({
     [chartDatasets, chartXMax, legendItems],
   );
 
-  const runSimulation = useCallback(async () => {
+  const runSimulation = useCallback(() => {
     setError("");
     setWarning("");
     setRunning(true);
-    setProgress({ completed: 0, total: Number(numSims) || 1 });
-    try {
-      const n = Math.min(Math.max(parseInt(numSims, 10) || 1, 1), 200);
-      const model = canonicalModelFromSerialized(buildSavePayload(), {
-        simulatorType: "ctmp-inhomo",
-        seed: rootSeed,
-        runs: n,
-        namespace: savedSimulationId ?? modelNamespaceRef.current,
-      });
-      const request = makeSimulationRequest(model, n, retentionMode);
-      coordinatorRef.current ??= createCanonicalCoordinator();
-      const job = coordinatorRef.current.run(request, {
-        onProgress: ({ completed, total }) => setProgress({ completed, total }),
-      });
-      activeJobRef.current = job;
-      const outcome = await job.promise;
-      activeJobRef.current = null;
-      let historyWarning = "";
-      if (sessionUser && savedSimulationId && canEditCurrentModel) {
-        try {
-          await persistBoundedRunHistory({ modelId: savedSimulationId, request, outcome });
-          setHistoryRefresh((value) => value + 1);
-        } catch (historyError) {
-          historyWarning = historyError.message || "Run history could not be saved.";
-        }
-      } else {
-        try {
-          await saveLocalRun(`ctmp-inhomo:${savedSimulationId ?? "anonymous"}`, createLocalRunRecord(request, outcome));
-          setHistoryRefresh((value) => value + 1);
-        } catch (historyError) {
-          historyWarning = historyError.message || "Local run history could not be saved.";
-        }
-      }
-      if (outcome.status === "cancelled") {
-        setStats(`Cancelled after ${outcome.runs.length} of ${n} runs`);
-        setWarning(historyWarning);
-        return;
-      }
-      const issues = resultIssues(outcome.runs);
-      if (issues.length) {
-        const failure = new Error(`${issues.length} run${issues.length === 1 ? "" : "s"} failed.`);
-        failure.code = "RUN_FAILED";
-        failure.details = { issues: issues.map((issue) => `Run ${issue.runIndex + 1} (${issue.code}): ${issue.message}`) };
-        throw failure;
-      }
-      const durationMs = outcome.provenance.durationMs;
-      setWarning([
-        ...outcome.warnings.map((item) => item.message ?? item.code),
-        ...(retentionMode === "summary" ? ["Summary mode retained bounded sample paths and statistics; full-path CSV is unavailable."] : []),
-        ...(historyWarning ? [historyWarning] : []),
-      ].join("\n"));
-      const provenance = buildResultProvenance(request, durationMs);
-      const datasets = datasetsFromRuns({ runs: outcome.runs, model, colors: CTMP_INHOMO_SERIES_COLORS, stepped: true });
-      setChartDatasets(datasets);
-      setChartXMax(Number(model.settings.tMax));
-      setResultProvenance(provenance);
-      lastRunSignatureRef.current = runInputSignature;
-      resultsCsvRef.current = retentionMode === "raw" ? {
-        csvText: buildSimulationResultsCsv({ results: outcome.runs, columnNames: model.variables.map((variable) => variable.name), provenance }),
-        filename: createSimulationResultsFilename({ modelName, simulatorType: "ctmp-inhomo" }),
-      } : null;
-      setHasResultsCsv(retentionMode === "raw");
-      const avgEvents = Math.round(outcome.runs.reduce((sum, run) => sum + run.eventCount, 0) / Math.max(1, outcome.runs.length));
-      setStats(`${avgEvents} events avg · ${durationMs.toFixed(0)} ms${retentionMode === "summary" ? ` · ${outcome.runs.length} sample paths retained` : ""}`);
-      setMobileView("results");
-    } catch (event) {
-      setError(formatStructuredError(event));
-    } finally {
-      activeJobRef.current = null;
-      setRunning(false);
-    }
-  }, [buildSavePayload, canEditCurrentModel, modelName, numSims, retentionMode, rootSeed, runInputSignature, savedSimulationId, sessionUser]);
 
-  const cancelSimulation = useCallback(() => activeJobRef.current?.cancel?.(), []);
+    setTimeout(() => {
+      try {
+        const parsedVars = parseNameValueLines(varsText, "Variable");
+        const parsedParams = parseNameValueLines(paramsText, "Parameter");
+        const parsedHelpers = parseHelperLines(helpersText);
 
-  const resultStatus = running ? "running" : error ? "failed" : chartDatasets.length ? (lastRunSignatureRef.current === runInputSignature ? "fresh" : "stale") : "idle";
-  const solverLabel = initialSavedPayload?.settings?.solver === "ctmp-piecewise-frozen-v1"
-    ? "Piecewise-frozen compatibility SSA"
-    : "Adaptive integrated-hazard SSA";
+        if (parsedVars.length === 0) {
+          throw new Error("Please define at least one variable.");
+        }
+
+        const varNames = parsedVars.map((v) => v.name);
+        const varLegendLabels = buildLegendLabelsFromRows(varNames, varRows);
+        const paramNames = parsedParams.map((p) => p.name);
+        const initialState = parsedVars.map((v) => v.val);
+
+        const paramsObj = {};
+        parsedParams.forEach((p) => {
+          paramsObj[p.name] = p.val;
+        });
+
+        const helperBlock = buildHelperBlock(parsedHelpers, paramNames);
+        const activeTransitions = transitions.filter((transition) =>
+          transition.rate.trim(),
+        );
+        if (activeTransitions.length === 0) {
+          throw new Error("Please define at least one transition.");
+        }
+
+        const modelTransitions = activeTransitions.map((transition, trIdx) => {
+          const rateFunc = compileExpression(
+            transition.rate,
+            varNames,
+            paramNames,
+            helperBlock,
+          );
+          const deltaFuncs = varNames.map((varName, varIdx) => {
+            const expr = String(transition.deltas[varIdx] ?? "0").trim() || "0";
+            try {
+              return compileExpression(expr, varNames, paramNames, helperBlock);
+            } catch (event) {
+              throw new Error(
+                `Transition ${trIdx + 1} (${varName} change): ${event.message}`,
+              );
+            }
+          });
+
+          const updateEvaluator = (state, t, params) =>
+            deltaFuncs.map((fn, varIdx) => {
+              const value = Number(fn(state, t, params));
+              if (!Number.isFinite(value)) {
+                throw new Error(
+                  `Transition ${trIdx + 1}: non-finite change for "${varNames[varIdx]}".`,
+                );
+              }
+              return value;
+            });
+
+          return new Transition(updateEvaluator, rateFunc);
+        });
+
+        const sim = new TimeStepper(modelTransitions, paramsObj);
+        const n = Math.min(Math.max(parseInt(numSims, 10) || 1, 1), 200);
+        const allResults = [];
+        let firstWarning = "";
+
+        for (let i = 0; i < n; i += 1) {
+          const result = sim.run([...initialState], Number(tMax), Number(dt));
+          if (!firstWarning && result.warningMsg) {
+            firstWarning = result.warningMsg;
+          }
+          allResults.push(result);
+        }
+
+        if (firstWarning) {
+          setWarning(firstWarning);
+        }
+
+        resultsCsvRef.current = {
+          csvText: buildSimulationResultsCsv({
+            results: allResults,
+            columnNames: varNames,
+          }),
+          filename: createSimulationResultsFilename({
+            modelName,
+            simulatorType: "ctmp-inhomo",
+          }),
+        };
+        setHasResultsCsv(true);
+
+        let alpha = 1.0;
+        let lineWidth = 2;
+        if (n > 1) {
+          alpha = 0.6;
+          lineWidth = 1.5;
+        }
+        if (n > 10) {
+          alpha = 0.3;
+          lineWidth = 1;
+        }
+        if (n > 50) {
+          alpha = 0.15;
+          lineWidth = 1;
+        }
+
+        const totalRawPts =
+          allResults.reduce((sum, result) => sum + result.times.length, 0) *
+          varNames.length;
+
+        const step = 1;
+        //FOR REDUCED PLOTTING RESOLUTION
+        // const step = totalRawPts > 15000 ? Math.ceil(totalRawPts / 15000) : 1;
+
+        const datasets = [];
+        allResults.forEach((result, simIdx) => {
+          const times = result.times.filter((_, idx) => idx % step === 0);
+          const history = result.history.filter((_, idx) => idx % step === 0);
+          varNames.forEach((_, idx) => {
+            const color = hexToRgba(
+              getSeriesColor(CTMP_INHOMO_SERIES_COLORS, idx),
+              alpha,
+            );
+            datasets.push({
+              label: simIdx === 0 ? varLegendLabels[idx] : "",
+              data: times.map((time, rowIdx) => ({
+                x: time,
+                y: history[rowIdx][idx],
+              })),
+              borderColor: color,
+              backgroundColor: color,
+              borderWidth: lineWidth,
+              stepped: "after",
+              pointRadius: 0,
+            });
+          });
+        });
+
+        setChartDatasets(datasets);
+        setChartXMax(allResults[0].times[allResults[0].times.length - 1]);
+        setStats(`${allResults[0].times.length} pts/path`);
+      } catch (event) {
+        setError(event.message);
+      } finally {
+        setRunning(false);
+      }
+    }, 50);
+  }, [
+    dt,
+    helpersText,
+    modelName,
+    numSims,
+    paramsText,
+    tMax,
+    transitions,
+    varRows,
+    varsText,
+  ]);
 
   return (
-    <div className={`workspace-shell workspace-view-${mobileView}`}>
-      <DraftRecoveryBanner draft={workspaceDraft} />
-      <WorkspaceHistoryControls history={workspaceHistory} />
-      <WorkspaceHeader title="Time-dependent jump process" method={solverLabel} mode={editorMode} onModeChange={setEditorMode} mobileView={mobileView} onMobileViewChange={setMobileView} resultStatus={resultStatus} progress={progress} seed={rootSeed} onSeedChange={setRootSeed} onNewSeed={() => setRootSeed(createRootSeed())} retentionMode={retentionMode} onRetentionModeChange={setRetentionMode} />
+    <div className="flex flex-col h-auto md:h-[calc(100vh-3.5rem)] bg-slate-300">
       <div className="flex-1 min-h-0 flex flex-col md:flex-row">
-        <aside className="workspace-editor workspace-editor-resizable w-full md:w-[500px] bg-slate-100 border-r border-slate-300 overflow-hidden flex flex-col" style={{ "--editor-width": `${editorPane.width}px` }}>
-          <div className="grid grid-cols-3 border-b border-slate-300 bg-slate-200" role="tablist" aria-label="Model editor sections">
-            {TAB_ITEMS.map((tab, tabIndex) => {
+        <aside className="w-full md:w-[500px] bg-slate-100 border-r border-slate-300 overflow-hidden flex flex-col">
+          <div className="grid grid-cols-3 border-b border-slate-300 bg-slate-200">
+            {TAB_ITEMS.map((tab) => {
               const isActive = activeTab === tab.id;
               return (
                 <button
                   key={tab.id}
                   type="button"
-                  id={`ctmp-${tab.id}-tab`}
-                  role="tab"
-                  aria-selected={isActive}
-                  aria-controls={`ctmp-${tab.id}-panel`}
-                  tabIndex={isActive ? 0 : -1}
-                  onKeyDown={(event) => handleTabKey(event, tabIndex, setActiveTab)}
                   onClick={() => setActiveTab(tab.id)}
                   className={`py-2 text-xs font-semibold border-r border-slate-300 last:border-r-0 ${
                     isActive
                       ? "bg-white text-slate-900"
-                      : "bg-slate-200 text-slate-700 hover:text-slate-900"
+                      : "bg-slate-200 text-slate-500 hover:text-slate-700"
                   }`}
                 >
                   {tab.label}
@@ -606,7 +548,7 @@ export default function CTMPInhomoSimulator({
             })}
           </div>
 
-          <div id={`ctmp-${activeTab}-panel`} role="tabpanel" aria-labelledby={`ctmp-${activeTab}-tab`} tabIndex="0" className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto">
             {activeTab === "vars" && (
               <ExpressionListSection
                 title="Variables"
@@ -620,8 +562,6 @@ export default function CTMPInhomoSimulator({
                 colorForRow={(index) =>
                   getSeriesColor(CTMP_INHOMO_SERIES_COLORS, index)
                 }
-                mode={editorMode}
-                metadataEnabled
               />
             )}
 
@@ -635,8 +575,6 @@ export default function CTMPInhomoSimulator({
                   onInsertRowAfter={insertRow(setParamRows)}
                   onRemoveRow={removeRow(setParamRows)}
                   placeholder="birth = 2"
-                  mode={editorMode}
-                  metadataEnabled
                 />
                 <ExpressionListSection
                   title="Time Functions"
@@ -646,7 +584,6 @@ export default function CTMPInhomoSimulator({
                   onInsertRowAfter={insertRow(setHelperRows)}
                   onRemoveRow={removeRow(setHelperRows)}
                   placeholder="Season(t) = 1 + A * sin(w*t)"
-                  mode={editorMode}
                 />
               </>
             )}
@@ -667,7 +604,7 @@ export default function CTMPInhomoSimulator({
                   )}
                 </div>
 
-                {transitions.map((transition, transitionIndex) => (
+                {transitions.map((transition) => (
                   <div
                     key={transition.id}
                     className="grid grid-cols-[46px_1fr_36px] border-b border-slate-300 bg-slate-100"
@@ -738,31 +675,24 @@ export default function CTMPInhomoSimulator({
                         </div>
                       )}
 
-                      <div className="transition-structured-row">
-                        <label><span>Name</span><input type="text" value={transition.name ?? ""} onChange={(event) => updateTransition(transition.id, "name", event.target.value)} placeholder={`Transition ${transitionIndex + 1}`} /></label>
-                        <div className="transition-row-actions">
-                          <button type="button" onClick={() => moveTransition(transition.id, -1)} disabled={transitionIndex === 0} aria-label={`Move ${transition.name || `transition ${transitionIndex + 1}`} up`}>↑</button>
-                          <button type="button" onClick={() => moveTransition(transition.id, 1)} disabled={transitionIndex === transitions.length - 1} aria-label={`Move ${transition.name || `transition ${transitionIndex + 1}`} down`}>↓</button>
-                          <button type="button" onClick={() => duplicateTransition(transition.id)}>Duplicate</button>
-                        </div>
-                      </div>
-
                       <div className="relative w-full mb-[2px]">
-                        <ScientificExpressionInput
-                          label={`Rate for ${transition.name || transition.noteLabel || "transition"}`}
+                        <input
+                          type="text"
                           value={transition.rate}
-                          onChange={(value) =>
+                          onChange={(event) =>
                             updateTransition(
                               transition.id,
                               "rate",
-                              value,
+                              event.target.value,
                             )
                           }
-                          symbols={expressionSymbols}
-                          showPreview={editorMode === "guided"}
+                          spellCheck={false}
                           className="w-full pl-2.5 pr-14 py-1.5 border border-slate-300 rounded text-sm bg-white"
                           placeholder="birth * Season(t) * Prey"
                         />
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] uppercase tracking-wide text-emerald-900/70 font-semibold pointer-events-none">
+                          Rate
+                        </span>
                       </div>
 
                       <div className="relative w-full flex items-center justify-end gap-3">
@@ -853,35 +783,28 @@ export default function CTMPInhomoSimulator({
           )}
         </aside>
 
-        <WorkspaceResizeHandle width={editorPane.width} onChange={editorPane.update} />
-        <div className="workspace-results flex-1 min-h-[360px] md:min-h-0 p-2 md:p-3 bg-slate-200 flex flex-col gap-2">
-          <div className="flex-1 min-h-0 bg-white">
-            <ScientificPlotLab
+        <div className="flex-1 min-h-[360px] md:min-h-0 p-2 md:p-3 bg-slate-200 flex flex-col gap-2">
+          <div className="flex-1 min-h-0 border border-slate-300 bg-white">
+            <SimChart
               datasets={chartDatasets}
               legendItems={legendItems}
-              solverLabel={solverLabel}
-              resultStatus={resultStatus}
-              provenance={resultProvenance}
-              initialPlotSpecs={plotSpecs}
-              onPlotSpecsChange={setPlotSpecs}
-              chartProps={{ xMax: chartXMax, xLabel: "Time", yLabel: "Count", showTooltips: parseInt(numSims, 10) <= 1 }}
+              xMax={chartXMax}
+              xLabel="Time"
+              yLabel="Count"
+              showTooltips={parseInt(numSims, 10) <= 1}
             />
           </div>
 
-          <ParameterSweepPanel buildModel={buildAnalysisModel} rootSeed={rootSeed} onSelectAssignments={loadSweepCell} />
-          <ConvergenceAssistant buildModel={buildAnalysisModel} rootSeed={rootSeed} />
-
           <div className="bg-white border border-slate-300">
-            <div className="run-bar px-3 py-2">
+            <div className="px-3 py-2">
               <div className="flex flex-wrap items-center gap-2">
                 <div className="order-1 flex items-center gap-2 mr-1">
                   <button
-                    id="ctmp-inhomo-run"
-                    type="button"
-                    onClick={running ? cancelSimulation : runSimulation}
-                    className="run-primary w-24 rounded bg-blue-900 hover:bg-blue-800 disabled:opacity-60 text-sm font-semibold text-white text-center"
+                    onClick={runSimulation}
+                    disabled={running}
+                    className="w-24 py-1.5 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-xs font-semibold text-white text-center"
                   >
-                    {running ? "Cancel" : "Run"}
+                    {running ? "Running..." : "Run"}
                   </button>
 
                   <button
@@ -894,8 +817,7 @@ export default function CTMPInhomoSimulator({
                   <button
                     type="button"
                     onClick={handleDownloadResultsCsv}
-                    disabled={!hasResultsCsv || resultStatus !== "fresh"}
-                    title={resultStatus === "stale" ? "Run the changed model before exporting" : undefined}
+                    disabled={!hasResultsCsv}
                     className="px-3 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 text-xs"
                   >
                     Download CSV
@@ -905,7 +827,6 @@ export default function CTMPInhomoSimulator({
                 <div className="order-2 flex items-center gap-2 flex-nowrap whitespace-nowrap max-w-full overflow-x-auto">
                   <label className="text-[11px] text-slate-500">t max</label>
                   <input
-                    aria-label="Maximum simulation time"
                     type="number"
                     value={tMax}
                     step="any"
@@ -915,7 +836,6 @@ export default function CTMPInhomoSimulator({
 
                   <label className="text-[11px] text-slate-500">dt</label>
                   <input
-                    aria-label="Maximum integration step"
                     type="number"
                     value={dt}
                     step="0.0001"
@@ -925,7 +845,6 @@ export default function CTMPInhomoSimulator({
 
                   <label className="text-[11px] text-slate-500">runs</label>
                   <input
-                    aria-label="Number of simulation runs"
                     type="number"
                     value={numSims}
                     min="1"
@@ -969,22 +888,13 @@ export default function CTMPInhomoSimulator({
               exportUsername={exportUsername}
               exportSlug={initialSavedSimulation?.slug ?? null}
               canEditCurrentModel={canEditCurrentModel}
-              initialDescription={initialSavedSimulation?.description}
-              initialTags={initialSavedSimulation?.tags}
-              initialVisibility={initialSavedSimulation?.visibility}
-              initialRevision={initialSavedSimulation?.revision}
-              sourceModelId={canEditCurrentModel ? null : initialSavedSimulation?.id}
-              previewIsFresh={resultStatus === "fresh"}
               getPayload={buildSavePayload}
               getPreviewChart={buildPreviewChart}
               onSaved={(savedSimulation) => {
                 setSavedSimulationId(savedSimulation.id);
                 setModelName(savedSimulation.name);
-                workspaceDraft.markSaved();
               }}
             />
-            <WorkspaceInterchange solverFamily="ctmp-inhomo" buildModel={buildAnalysisModel} onImportModel={importModel} modelName={modelName} />
-            <RunHistoryPanel modelId={savedSimulationId} enabled={Boolean(sessionUser && canEditCurrentModel)} localKey={!sessionUser || !canEditCurrentModel ? `ctmp-inhomo:${savedSimulationId ?? "anonymous"}` : null} refreshToken={historyRefresh} />
           </div>
         </div>
       </div>

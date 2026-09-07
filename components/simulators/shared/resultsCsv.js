@@ -13,34 +13,17 @@ function escapeCsvValue(value) {
   return `"${text.replace(/"/g, '""')}"`;
 }
 
-export function buildSimulationResultsCsv({ results = [], columnNames = [], provenance = null }) {
+export function buildSimulationResultsCsv({ results = [], columnNames = [] }) {
   const lines = [
-    ...(provenance
-      ? [
-          `# Markov Lab model hash,${escapeCsvValue(provenance.modelHash)}`,
-          `# root seed,${escapeCsvValue(provenance.seed)}`,
-          `# solver,${escapeCsvValue(provenance.solver)}`,
-          `# solver version,${escapeCsvValue(provenance.solverVersion)}`,
-          `# backend,${escapeCsvValue(provenance.backend)}`,
-          `# precision,${escapeCsvValue(provenance.precision)}`,
-        ]
-      : []),
     ["run", "t", ...columnNames].map(escapeCsvValue).join(","),
   ];
 
-  results.forEach((result, resultIndex) => {
-    const runIndex = Number.isSafeInteger(result?.runIndex) ? result.runIndex : resultIndex;
-    const times = result?.times instanceof Float64Array
-      ? Array.from(result.times)
-      : Array.isArray(result?.times) ? result.times : [];
-    const history = Array.isArray(result?.history) ? result.history : null;
+  results.forEach((result, runIndex) => {
+    const times = Array.isArray(result?.times) ? result.times : [];
+    const history = Array.isArray(result?.history) ? result.history : [];
 
     times.forEach((time, rowIndex) => {
-      const values = history && Array.isArray(history[rowIndex])
-        ? history[rowIndex]
-        : result?.values instanceof Float64Array
-          ? Array.from({ length: result.stateCount }, (_, columnIndex) => result.values[rowIndex * result.stateCount + columnIndex])
-          : [];
+      const values = Array.isArray(history[rowIndex]) ? history[rowIndex] : [];
       lines.push(
         [runIndex, time, ...columnNames.map((_, columnIndex) => values[columnIndex] ?? "")]
           .map(escapeCsvValue)

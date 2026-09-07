@@ -6,11 +6,9 @@ import {
 } from "@/lib/saved-simulations/service";
 import {
   SIMULATOR_TYPES,
-  VISIBILITY_VALUES,
   ValidationError,
   validateCreateSavedSimulationInput,
 } from "@/lib/saved-simulations/validators";
-import { internalErrorResponse } from "@/lib/http/internal-error";
 
 export const runtime = "nodejs";
 
@@ -45,25 +43,17 @@ export async function GET(request) {
       { status: 400 },
     );
   }
-  const visibility = searchParams.get("visibility");
-  if (visibility && !VISIBILITY_VALUES.includes(visibility)) {
-    return NextResponse.json({ error: "Invalid visibility filter." }, { status: 400 });
-  }
 
   try {
     const items = await listSavedSimulationsForUser(sessionUser.id, {
       simulatorType: simulatorType || undefined,
-      visibility: visibility || undefined,
-      search: searchParams.get("search")?.trim() || undefined,
-      tags: searchParams.getAll("tag").filter(Boolean),
-      sort: searchParams.get("sort") || undefined,
-      cursor: searchParams.get("cursor") || undefined,
-      limit: searchParams.get("limit") || undefined,
-      deleted: searchParams.get("deleted") || undefined,
     });
     return NextResponse.json(items);
   } catch (error) {
-    return internalErrorResponse(error, "Failed to list saved simulations.");
+    return NextResponse.json(
+      { error: error.message || "Failed to list saved simulations." },
+      { status: 500 },
+    );
   }
 }
 
@@ -83,6 +73,9 @@ export async function POST(request) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    return internalErrorResponse(error, "Failed to create saved simulation.");
+    return NextResponse.json(
+      { error: error.message || "Failed to create saved simulation." },
+      { status: 500 },
+    );
   }
 }

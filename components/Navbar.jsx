@@ -7,10 +7,10 @@ import { signOut } from "next-auth/react";
 import { ACCOUNT_USERNAME_UPDATED_EVENT } from "@/lib/auth/events";
 
 const NAV_LINKS = [
-  { href: "/", label: "Overview" },
-  { href: "/gillespie", label: "Reaction network" },
-  { href: "/ctmp-inhomo", label: "Time-dependent" },
-  { href: "/sde", label: "SDE" },
+  { href: "/", label: "Home" },
+  { href: "/gillespie", label: "CTMC Gillespie" },
+  { href: "/ctmp-inhomo", label: "CTMP Time Var" },
+  { href: "/sde", label: "SDE Solver" },
 ];
 const PROFILE_TOGGLE_SELECTOR = '[data-profile-toggle="true"]';
 
@@ -213,7 +213,7 @@ export default function Navbar({ sessionUser = null }) {
             setProfileOpen(false);
           }}
         >
-          <span className="brand-mark" aria-hidden="true">M</span> Markov Lab
+          Markov Side-by-Side
         </Link>
 
         <div className="hidden md:flex items-center gap-2">

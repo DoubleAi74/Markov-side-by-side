@@ -5,7 +5,6 @@ import {
   stringifyModelExportConfig,
 } from "@/lib/exports/config";
 import { getPublicSavedSimulationByUsernameAndSlug } from "@/lib/saved-simulations/service";
-import { internalErrorResponse } from "@/lib/http/internal-error";
 
 export const runtime = "nodejs";
 
@@ -35,6 +34,9 @@ export async function GET(_request, { params }) {
       },
     });
   } catch (error) {
-    return internalErrorResponse(error, "Failed to export public model config.");
+    return NextResponse.json(
+      { error: error.message || "Failed to export public model config." },
+      { status: 500 },
+    );
   }
 }

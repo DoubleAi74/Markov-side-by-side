@@ -6,7 +6,6 @@ import {
   stringifyModelExportConfig,
 } from "@/lib/exports/config";
 import { getSavedSimulationForUser } from "@/lib/saved-simulations/service";
-import { internalErrorResponse } from "@/lib/http/internal-error";
 
 export const runtime = "nodejs";
 
@@ -48,6 +47,9 @@ export async function GET(_request, { params }) {
       },
     });
   } catch (error) {
-    return internalErrorResponse(error, "Failed to export model config.");
+    return NextResponse.json(
+      { error: error.message || "Failed to export model config." },
+      { status: 500 },
+    );
   }
 }

@@ -6,7 +6,6 @@ import {
   UsernameConflictError,
   UsernameInputError,
 } from "@/lib/auth/users";
-import { internalErrorResponse } from "@/lib/http/internal-error";
 
 export const runtime = "nodejs";
 
@@ -43,7 +42,10 @@ export async function GET() {
       username: ensured?.username ?? null,
     });
   } catch (error) {
-    return internalErrorResponse(error, "Failed to fetch username.");
+    return NextResponse.json(
+      { error: error.message || "Failed to fetch username." },
+      { status: 500 },
+    );
   }
 }
 
@@ -73,6 +75,9 @@ export async function PATCH(request) {
       return NextResponse.json({ error: error.message }, { status: 409 });
     }
 
-    return internalErrorResponse(error, "Failed to update username.");
+    return NextResponse.json(
+      { error: error.message || "Failed to update username." },
+      { status: 500 },
+    );
   }
 }

@@ -21,7 +21,7 @@ export default async function GillespiePage({ searchParams }) {
       notFound();
     }
 
-    if (initialSavedSimulation.visibility !== "private" && sessionUser.username && initialSavedSimulation.slug) {
+    if (sessionUser.username && initialSavedSimulation.slug) {
       redirect(
         `/-/${encodeURIComponent(sessionUser.username)}/${encodeURIComponent(initialSavedSimulation.slug)}`,
       );

@@ -5,12 +5,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <exception>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <limits>
-#include <mutex>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -75,44 +73,26 @@ struct RuntimeOptions {
   std::string outputPath;
   std::size_t runCount = 0;
   std::uint64_t seed = 0;
-  bool seedProvided = false;
   std::size_t threadCount = 0;
   std::vector<std::size_t> recordedRuns;
 };
 
 CompiledModelData gModel;
 
-std::uint64_t splitMix64(std::uint64_t& state) {
-  state += kSplitMixIncrement;
-  std::uint64_t z = state;
-  z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
-  z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
-  return z ^ (z >> 31);
-}
-
-std::uint64_t rotateLeft(std::uint64_t value, int amount) {
-  return (value << amount) | (value >> (64 - amount));
-}
-
 class Rng {
  public:
-  explicit Rng(std::uint64_t seed) {
-    std::uint64_t source = seed;
-    for (std::uint64_t& word : state_) {
-      word = splitMix64(source);
+  explicit Rng(std::uint64_t seed) : state_(seed) {
+    if (state_ == 0) {
+      state_ = 0x6a09e667f3bcc909ULL;
     }
   }
 
   std::uint64_t nextU64() {
-    const std::uint64_t result = rotateLeft(state_[1] * 5ULL, 7) * 9ULL;
-    const std::uint64_t shifted = state_[1] << 17;
-    state_[2] ^= state_[0];
-    state_[3] ^= state_[1];
-    state_[1] ^= state_[2];
-    state_[0] ^= state_[3];
-    state_[2] ^= shifted;
-    state_[3] = rotateLeft(state_[3], 45);
-    return result;
+    state_ += kSplitMixIncrement;
+    std::uint64_t z = state_;
+    z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
+    z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
+    return z ^ (z >> 31);
   }
 
   double uniformOpen01() {
@@ -135,7 +115,7 @@ class Rng {
   }
 
  private:
-  std::uint64_t state_[4]{};
+  std::uint64_t state_;
 };
 
 template <typename T>
@@ -304,9 +284,14 @@ std::size_t componentCount() {
 }
 
 std::uint64_t deriveRunSeed(std::uint64_t masterSeed, std::size_t runIndex) {
-  std::uint64_t source = masterSeed ^
-    (static_cast<std::uint64_t>(runIndex) * 0xd2b74407b1ce6e93ULL);
-  return splitMix64(source);
+  std::uint64_t seed =
+    masterSeed + kSplitMixIncrement * static_cast<std::uint64_t>(runIndex + 1);
+  seed ^= seed >> 30;
+  seed *= 0xbf58476d1ce4e5b9ULL;
+  seed ^= seed >> 27;
+  seed *= 0x94d049bb133111ebULL;
+  seed ^= seed >> 31;
+  return seed;
 }
 
 double applyBuiltin(int builtinCode, double left, double right) {
@@ -520,19 +505,8 @@ void applyDiscreteTransition(
       time,
       params
     );
-    if (!std::isfinite(delta) || std::trunc(delta) != delta) {
-      throw std::runtime_error("A CTMC transition delta is not a finite integer.");
-    }
     const double nextValue = state[variableIndex] + delta;
-    if (
-      !std::isfinite(nextValue) ||
-      std::trunc(nextValue) != nextValue ||
-      nextValue < 0.0 ||
-      std::abs(nextValue) > 9007199254740991.0
-    ) {
-      throw std::runtime_error("A CTMC transition would produce an invalid state.");
-    }
-    nextState[variableIndex] = nextValue;
+    nextState[variableIndex] = std::max(0.0, std::floor(nextValue));
   }
   state.swap(nextState);
 }
@@ -542,7 +516,7 @@ void runGillespieSimulation(
   std::ostream* stream,
   std::uint64_t runSeed
 ) {
-  constexpr std::size_t kMaxIterations = 5000000;
+  constexpr std::size_t kMaxIterations = 500000;
 
   Rng rng(runSeed);
   std::vector<double> state = buildInitialState();
@@ -551,37 +525,30 @@ void runGillespieSimulation(
 
   maybeWriteCsvRow(stream, runIndex, time, state);
 
-  std::size_t iteration = 0;
-  while (time < gModel.tMax) {
-    if (iteration >= kMaxIterations) {
-      throw std::runtime_error("Gillespie run exceeded the explicit 5000000-event resource budget.");
-    }
-    iteration += 1;
+  for (std::size_t iteration = 0; iteration < kMaxIterations && time < gModel.tMax; iteration += 1) {
     std::vector<double> rates(transitionCount(), 0.0);
     double totalRate = 0.0;
 
     for (std::size_t transitionIndex = 0; transitionIndex < transitionCount(); transitionIndex += 1) {
-      const double rate = evaluateExpression(
-        gModel.rateExpressions[transitionIndex],
-        state,
+      const double rate = std::max(
         0.0,
-        params
+        evaluateExpression(
+          gModel.rateExpressions[transitionIndex],
+          state,
+          0.0,
+          params
+        )
       );
-      if (!std::isfinite(rate) || rate < 0.0) {
-        throw std::runtime_error("Gillespie propensity is negative or non-finite.");
-      }
       rates[transitionIndex] = rate;
       totalRate += rate;
     }
 
     if (totalRate < 1e-12) {
-      maybeWriteCsvRow(stream, runIndex, gModel.tMax, state);
       break;
     }
 
     const double tau = -std::log(rng.uniformOpen01()) / totalRate;
     if (time + tau >= gModel.tMax) {
-      maybeWriteCsvRow(stream, runIndex, gModel.tMax, state);
       break;
     }
     time += tau;
@@ -608,72 +575,55 @@ void runCTMPInhomogeneousSimulation(
   std::uint64_t runSeed
 ) {
   constexpr std::size_t kMaxSteps = 5000000;
-  constexpr std::size_t kMaxEvents = 5000000;
 
   Rng rng(runSeed);
   std::vector<double> state = buildInitialState();
   const std::vector<double> params = buildParameterValues();
   double time = 0.0;
 
+  const std::size_t logInterval = std::max<std::size_t>(
+    1,
+    static_cast<std::size_t>(std::floor(0.01 / gModel.dt))
+  );
+
   maybeWriteCsvRow(stream, runIndex, time, state);
-  std::size_t stepCount = 0;
-  std::size_t eventCount = 0;
-  while (time < gModel.tMax) {
-    if (stepCount >= kMaxSteps) {
-      throw std::runtime_error("CTMP run exceeded the explicit 5000000-interval resource budget.");
-    }
-    stepCount += 1;
-    const double freezeTime = time;
-    double intervalEnd = std::min(gModel.tMax, freezeTime + gModel.dt);
-    while (time < intervalEnd) {
-      if (eventCount >= kMaxEvents) {
-        throw std::runtime_error("CTMP run exceeded the explicit 5000000-event resource budget.");
-      }
-      std::vector<double> rates(transitionCount(), 0.0);
-      double totalRate = 0.0;
-      for (std::size_t transitionIndex = 0; transitionIndex < transitionCount(); transitionIndex += 1) {
-        const double rate = evaluateExpression(
-          gModel.rateExpressions[transitionIndex], state, freezeTime, params
-        );
-        if (!std::isfinite(rate) || rate < 0.0) {
-          throw std::runtime_error("CTMP rate is negative or non-finite.");
-        }
-        rates[transitionIndex] = rate;
-        totalRate += rate;
-      }
-      if (totalRate == 0.0) {
-        time = intervalEnd;
-        break;
-      }
-      intervalEnd = std::min(
-        intervalEnd,
-        std::max(time, freezeTime + std::min(gModel.dt, 0.25 / totalRate))
+
+  for (std::size_t stepCount = 0; stepCount < kMaxSteps && time < gModel.tMax; stepCount += 1) {
+    std::vector<double> probabilities(transitionCount(), 0.0);
+    double totalProbability = 0.0;
+
+    for (std::size_t transitionIndex = 0; transitionIndex < transitionCount(); transitionIndex += 1) {
+      const double rate = evaluateExpression(
+        gModel.rateExpressions[transitionIndex],
+        state,
+        time,
+        params
       );
-      if (intervalEnd <= time) {
-        break;
-      }
-      const double eventTime = time - std::log(rng.uniformOpen01()) / totalRate;
-      if (eventTime >= intervalEnd) {
-        time = intervalEnd;
-        break;
-      }
-      const double selector = rng.uniformOpen01() * totalRate;
+      const double probability = std::max(0.0, rate) * gModel.dt;
+      probabilities[transitionIndex] = probability;
+      totalProbability += probability;
+    }
+
+    const double selector = rng.uniformOpen01();
+    bool eventOccurred = false;
+    if (selector < totalProbability) {
       double cumulative = 0.0;
-      std::size_t selected = transitionCount() - 1;
       for (std::size_t transitionIndex = 0; transitionIndex < transitionCount(); transitionIndex += 1) {
-        cumulative += rates[transitionIndex];
+        cumulative += probabilities[transitionIndex];
         if (selector < cumulative) {
-          selected = transitionIndex;
+          applyDiscreteTransition(transitionIndex, state, time, params);
+          eventOccurred = true;
           break;
         }
       }
-      applyDiscreteTransition(selected, state, eventTime, params);
-      time = eventTime;
-      eventCount += 1;
+    }
+
+    time += gModel.dt;
+    const std::size_t nextStepCount = stepCount + 1;
+    if ((nextStepCount % logInterval) == 0 || eventOccurred) {
       maybeWriteCsvRow(stream, runIndex, time, state);
     }
   }
-  maybeWriteCsvRow(stream, runIndex, gModel.tMax, state);
 }
 
 void runSDESimulation(
@@ -690,18 +640,12 @@ void runSDESimulation(
 
   maybeWriteCsvRow(stream, runIndex, time, state);
 
-  std::size_t stepCount = 0;
-  while (time < gModel.tMax) {
-    if (stepCount >= kMaxSteps) {
-      throw std::runtime_error("SDE run exceeded the explicit 500000-step resource budget.");
-    }
-    stepCount += 1;
-    const double step = std::min(gModel.dt, gModel.tMax - time);
-    const double sqrtStep = std::sqrt(step);
+  const double sqrtDt = std::sqrt(gModel.dt);
+  for (std::size_t stepCount = 0; stepCount < kMaxSteps && time < gModel.tMax; stepCount += 1) {
     std::vector<double> nextState = state;
 
     for (std::size_t componentIndex = 0; componentIndex < componentCount(); componentIndex += 1) {
-      const double dW = rng.normal() * sqrtStep;
+      const double dW = rng.normal() * sqrtDt;
       const double drift = evaluateExpression(
         gModel.driftExpressions[componentIndex],
         state,
@@ -716,15 +660,12 @@ void runSDESimulation(
       );
       nextState[componentIndex] =
         state[componentIndex] +
-        drift * step +
+        drift * gModel.dt +
         diffusion * dW;
-      if (!std::isfinite(nextState[componentIndex])) {
-        throw std::runtime_error("SDE state became non-finite.");
-      }
     }
 
     state.swap(nextState);
-    time += step;
+    time += gModel.dt;
     maybeWriteCsvRow(stream, runIndex, time, state);
   }
 }
@@ -806,7 +747,6 @@ RuntimeOptions parseArgs(int argc, char** argv) {
       options.runCount = static_cast<std::size_t>(std::stoull(argv[++index]));
     } else if (arg == "--seed" && index + 1 < argc) {
       options.seed = static_cast<std::uint64_t>(std::stoull(argv[++index]));
-      options.seedProvided = true;
     } else if (arg == "--threads" && index + 1 < argc) {
       options.threadCount = static_cast<std::size_t>(std::stoull(argv[++index]));
     } else if (arg == "--record-runs" && index + 1 < argc) {
@@ -825,8 +765,8 @@ RuntimeOptions parseArgs(int argc, char** argv) {
   if (options.runCount == 0) {
     throw std::runtime_error("Run count must be greater than zero.");
   }
-  if (!options.seedProvided) {
-    throw std::runtime_error("Seed must be provided as a uint64 decimal value.");
+  if (options.seed == 0) {
+    throw std::runtime_error("Seed must be greater than zero.");
   }
   return options;
 }
@@ -938,36 +878,23 @@ int main(int argc, char** argv) {
     }
 
     std::vector<std::thread> workers;
-    std::exception_ptr workerError;
-    std::mutex workerErrorMutex;
     workers.reserve(threadCount);
     for (std::size_t index = 0; index < threadCount; index += 1) {
       workers.emplace_back(
         [&, index]() {
-          try {
-            runRange(
-              ranges[index].first,
-              ranges[index].second,
-              partPaths[index],
-              options.seed,
-              options.recordedRuns
-            );
-          } catch (...) {
-            std::lock_guard<std::mutex> lock(workerErrorMutex);
-            if (!workerError) {
-              workerError = std::current_exception();
-            }
-          }
+          runRange(
+            ranges[index].first,
+            ranges[index].second,
+            partPaths[index],
+            options.seed,
+            options.recordedRuns
+          );
         }
       );
     }
 
     for (std::thread& worker : workers) {
       worker.join();
-    }
-
-    if (workerError) {
-      std::rethrow_exception(workerError);
     }
 
     mergePartFiles(options.outputPath, partPaths);

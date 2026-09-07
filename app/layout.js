@@ -1,17 +1,16 @@
 import "./globals.css";
+import { config } from "@fortawesome/fontawesome-svg-core";
+import "@fortawesome/fontawesome-svg-core/styles.css";
+config.autoAddCss = false;
 import Navbar from "@/components/Navbar";
 import AppClientShell from "@/components/providers/AppClientShell";
 import { auth } from "@/auth";
 import { buildSessionUser } from "@/lib/auth/session-user";
 
 export const metadata = {
-  title: {
-    default: "Markov Lab",
-    template: "%s · Markov Lab",
-  },
+  title: "Markov Side-by-Side",
   description:
-    "A reproducible browser workspace for jump processes, stochastic differential equations, and scientific analysis.",
-  robots: { index: false, follow: false },
+    "Interactive stochastic simulation tools: CTMC Gillespie, time-dependent CTMP, and SDE solver.",
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
@@ -39,18 +38,15 @@ export const metadata = {
 };
 
 export default async function RootLayout({ children }) {
-  // Public browser tests intentionally run without production auth/database
-  // services. The explicit flag is set only by the Playwright web server.
-  const session = process.env.MARKOV_LAB_E2E === "true" ? null : await auth();
+  const session = await auth();
   const sessionUser = await buildSessionUser(session, { ensureUsername: true });
 
   return (
     <html lang="en">
       <body className="bg-slate-50 text-slate-800 antialiased">
-        <a className="skip-link" href="#main-content">Skip to main content</a>
         <Navbar sessionUser={sessionUser} />
         <AppClientShell>
-          <main id="main-content" tabIndex="-1">{children}</main>
+          <main>{children}</main>
         </AppClientShell>
       </body>
     </html>
