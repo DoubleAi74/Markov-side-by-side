@@ -271,9 +271,47 @@ Saved payload:
 }
 ```
 
-Each component has a non-negative integer initial value and a list of
-independent per-individual outcomes. Each outcome specifies its offspring
-count and probability, and the probabilities for a component must total 1.
+Discrete-time components now have a `mode` field:
+
+- `branching`: each individual independently draws an offspring count. Initial values and offspring are non-negative integers. This is the default when `mode` is absent, so existing models keep their original meaning.
+- `increments`: one change is drawn per step and added to the variable. Initial values and changes can be negative integers. Outcomes use `change` instead of `offspring`.
+- `matrix`: a finite-state chain uses integer `states` and a square `matrix`. Row i describes probabilities from state i to each destination column. Each row must total 1, and the initial value must be one of the states.
+
+A simple random walk is represented as:
+
+```json
+{
+  "name": "X",
+  "init": 0,
+  "mode": "increments",
+  "useSlider": true,
+  "outcomes": [
+    { "change": 1, "probability": 0.5 },
+    { "change": -1, "probability": 0.5 }
+  ],
+  "noteEnabled": false,
+  "noteLabel": ""
+}
+```
+
+A finite-state chain can instead use:
+
+```json
+{
+  "name": "State",
+  "init": 0,
+  "mode": "matrix",
+  "states": [0, 1],
+  "matrix": [[0.8, 0.2], [0.3, 0.7]],
+  "useSlider": false,
+  "noteEnabled": false,
+  "noteLabel": ""
+}
+```
+
+`useSlider` records the editor preference. With two outcomes (or two matrix columns), enabling it links the first probability `p` to the second probability `1 - p`. Exact numeric inputs remain available. More than two outcomes use independent numeric probability inputs.
+
+Variables evolve independently. Increment probabilities are constant; finite-state dependence is specified through matrix rows. The browser and save API share validation in `lib/discrete-time/model.js`. The UI calls generations “steps” for all three modes, while the saved setting remains `generations` for compatibility. JSON exports retain the active mode and its definition. Native runner export remains unavailable for discrete-time models.
 
 ## What Is Not Saved In The Main Model Format
 
@@ -294,7 +332,7 @@ The text strings follow simple conventions:
 - CTMP helper functions: `Season(t) = 1 + A*sin(w*t)`
 - transitions: rate expression + delta vector
 - SDE components: stored structurally, not as one text line in the saved payload
-- discrete-time components: `name`, integer `init`, and independent offspring outcomes
+- discrete-time components: `name`, integer `init`, `mode`, and either offspring outcomes, changes per step, or a transition matrix
 
 The user sees text, but the app saves a JSON representation of that text.
 

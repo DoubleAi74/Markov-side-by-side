@@ -1,31 +1,40 @@
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import ExampleCard from "@/components/examples/ExampleCard";
 import { EXAMPLE_MODELS } from "@/lib/examples/models";
 
 const SIMULATORS = [
   {
     href: "/gillespie",
-    title: "Homogeneous CTMC",
-    description: "Continuous time, discrete space, constant rates.",
-    accent: "border-t-blue-500",
+    title: "CTMC",
+    titleNote: "homogeneous",
+    titleNoteShort: "hom.",
+    ariaName: "homogeneous CTMC",
+    description: "Discrete space, constant rates.",
+    accent: "bg-[#157C94]", // turquoise blue
   },
   {
     href: "/ctmp-inhomo",
-    title: "Inhomogeneous CTMC",
-    description: "Continuous time, discrete space, time variable rates.",
-    accent: "border-t-blue-700",
+    title: "CTMC",
+    titleNote: "inhomogeneous",
+    titleNoteShort: "inhom.",
+    ariaName: "inhomogeneous CTMC",
+    description: "Discrete space, variable rates.",
+    accent: "bg-[#B02B42]", // wine red
   },
   {
     href: "/sde",
-    title: "Differential equations with stochastic noise (SDEs)",
-    description: "Continuous time, continuous space.",
-    accent: "border-t-amber-500",
+    title: "SDEs",
+    ariaName: "SDEs",
+    description: "Continuous time and space.",
+    accent: "bg-[#F0915E]", // pastel flame orange
   },
   {
     href: "/discrete-time",
-    title: "Discrete-time Markov processes",
-    description: "Discrete time, discrete space.",
-    accent: "border-t-emerald-600",
+    title: "Discrete-time",
+    ariaName: "Discrete-time",
+    description: "Discrete time and space.",
+    accent: "bg-[#2F6B35]", // deep leafy green
   },
 ];
 
@@ -43,31 +52,50 @@ export default function HomePage() {
       </div>
 
       {/* Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-6">
-        {SIMULATORS.map(({ href, title, description, accent }) => (
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+        {SIMULATORS.map(({ href, title, titleNote, titleNoteShort, ariaName, description, accent }) => (
           <Link
             key={href}
             href={href}
-            className={`group bg-white rounded-xl shadow-sm border border-slate-200 border-t-4 ${accent} p-4 md:p-6 hover:shadow-md transition-shadow flex flex-col`}
+            aria-label={`Open ${ariaName} simulator`}
+            className="group flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-sm transition duration-150 hover:border-slate-300 hover:bg-white hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
           >
-            <h2 className="text-lg font-bold text-slate-800 mb-2 group-hover:text-blue-900 transition-colors">
-              {title}
-            </h2>
-            <p className="text-sm text-slate-500 flex-1 leading-relaxed">
-              {description}
-            </p>
-            <div className="mt-4 text-sm font-semibold text-blue-900 group-hover:underline">
-              Open simulator →
+            <div className="relative flex flex-1 flex-col p-3 md:p-4">
+              <h2 className="mb-1 pr-5 whitespace-nowrap text-sm font-bold text-slate-800 transition-colors group-hover:text-slate-950 sm:text-base md:text-lg">
+                {title}
+                {titleNote ? (
+                  <span className="ml-0.5 text-[10px] font-medium text-slate-500 transition-colors group-hover:text-slate-600 sm:ml-1 sm:text-xs">
+                    (
+                    <span className="md:hidden lg:inline">{titleNote}</span>
+                    <span className="hidden md:inline lg:hidden">
+                      {titleNoteShort}
+                    </span>
+                    )
+                  </span>
+                ) : null}
+              </h2>
+              <p className="flex-1 text-xs leading-snug text-slate-500 md:text-sm md:leading-relaxed">
+                {description}
+              </p>
+              <ArrowRight
+                aria-hidden="true"
+                strokeWidth={1.5}
+                className="absolute right-2 top-2 size-3.5 text-slate-300 transition duration-150 group-hover:translate-x-0.5 group-hover:text-slate-500 md:right-3 md:top-3"
+              />
             </div>
+            <div
+              className={`h-[9.6px] opacity-60 transition-opacity duration-150 group-hover:opacity-100 ${accent}`}
+              aria-hidden="true"
+            />
           </Link>
         ))}
       </div>
 
-      <div className="mt-10 md:mt-14">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-3">
+      <div className="mx-auto mt-10 w-[85%] md:mt-14">
+        <h2 className="mb-6 text-center text-sm font-semibold uppercase tracking-wide text-slate-400 md:mb-8">
           Examples
         </h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 md:gap-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
           {EXAMPLE_MODELS.map((example) => (
             <ExampleCard key={example.slug} example={example} />
           ))}

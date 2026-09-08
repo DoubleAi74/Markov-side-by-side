@@ -1,5 +1,6 @@
+import { MAX_DISCRETE_STATE, normalizeDiscreteComponent } from "../../../lib/discrete-time/model.js";
+
 const MAX_GENERATIONS = 10000;
-const MAX_DISCRETE_STATE = 1000000;
 
 function requireProbability(value, label) {
   const probability = Number(value);
@@ -119,10 +120,27 @@ export function sampleIndependentOutcomes(
 }
 
 export class DiscreteTimeComponent {
-  constructor(name, outcomes) {
+  constructor(name, outcomes, { mode = "branching", states, matrix } = {}) {
     this.name = name;
     this.outcomes = outcomes;
+    this.mode = mode;
+    this.states = states;
+    this.matrix = matrix;
   }
+}
+
+function sampleTransitionIndex(probabilities, random) {
+  const draw = random();
+  let cumulative = 0;
+  let lastPossible = 0;
+  for (let index = 0; index < probabilities.length; index += 1) {
+    if (probabilities[index] > 0) lastPossible = index;
+    cumulative += probabilities[index];
+    if (draw < cumulative) return index;
+  }
+  // Permit rounding within the validation tolerance without selecting a
+  // trailing state whose probability is zero.
+  return lastPossible;
 }
 
 export class DiscreteTimeStepper {
@@ -134,9 +152,9 @@ export class DiscreteTimeStepper {
   }
 
   run() {
-    const generationCount = Math.floor(Number(this.generations));
+    const generationCount = Number(this.generations);
     if (
-      !Number.isFinite(generationCount) ||
+      !Number.isInteger(generationCount) ||
       generationCount < 1 ||
       generationCount > MAX_GENERATIONS
     ) {
@@ -145,21 +163,34 @@ export class DiscreteTimeStepper {
       );
     }
 
-    let state = this.initialState.map((value) =>
-      Math.max(0, Math.floor(Number(value))),
+    if (!this.components.length || this.components.length !== this.initialState.length) {
+      throw new Error("Define one initial value for each variable.");
+    }
+    const components = this.components.map((component, index) =>
+      normalizeDiscreteComponent({ ...component, init: this.initialState[index] }, `Variable ${index + 1}`),
     );
+    let state = components.map((component) => component.init);
     const times = [0];
     const history = [[...state]];
 
     for (let generation = 0; generation < generationCount; generation += 1) {
-      const nextState = this.components.map((component, componentIndex) => {
+      const nextState = components.map((component, componentIndex) => {
         let rawValue;
         try {
-          rawValue = sampleIndependentOutcomes(
-            state[componentIndex],
-            component.outcomes,
-            this.random,
-          );
+          if (component.mode === "increments") {
+            const selected = sampleTransitionIndex(component.outcomes.map((outcome) => outcome.probability), this.random);
+            rawValue = state[componentIndex] + component.outcomes[selected].change;
+          } else if (component.mode === "matrix") {
+            const rowIndex = component.states.indexOf(state[componentIndex]);
+            const selected = sampleTransitionIndex(component.matrix[rowIndex], this.random);
+            rawValue = component.states[selected];
+          } else {
+            rawValue = sampleIndependentOutcomes(
+              state[componentIndex],
+              component.outcomes,
+              this.random,
+            );
+          }
         } catch (error) {
           throw new Error(
             `Outcomes for "${component.name}" failed at generation ${generation + 1}: ${error.message}`,
@@ -172,10 +203,10 @@ export class DiscreteTimeStepper {
           );
         }
 
-        const discreteValue = Math.max(0, Math.floor(rawValue));
-        if (discreteValue > MAX_DISCRETE_STATE) {
+        const discreteValue = rawValue;
+        if (!Number.isInteger(discreteValue) || Math.abs(discreteValue) > MAX_DISCRETE_STATE) {
           throw new Error(
-            `State for "${component.name}" exceeded ${MAX_DISCRETE_STATE.toLocaleString()} at generation ${generation + 1}.`,
+            `State for "${component.name}" exceeded the integer range ±${MAX_DISCRETE_STATE.toLocaleString()} at generation ${generation + 1}.`,
           );
         }
         return discreteValue;

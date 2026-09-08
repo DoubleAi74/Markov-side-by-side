@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { X } from "lucide-react";
+import DiscreteComponentEditor from "./DiscreteComponentEditor";
+import { parseDiscreteComponents } from "@/lib/discrete-time/model";
 import {
+  hydrateDiscreteComponent,
   hydrateDiscreteTimePayload,
   serializeDiscreteTimeState,
 } from "@/lib/saved-simulations/serializers";
@@ -38,130 +40,12 @@ const GALTON_WATSON_PRESET = {
   numSims: 12,
 };
 
-function makeId() {
-  return Math.random().toString(36).slice(2);
-}
-
-function withOutcomeIds(outcomes) {
-  return outcomes.map((outcome) => ({
-    id: makeId(),
-    offspring: String(outcome.offspring),
-    probability: String(outcome.probability),
-  }));
-}
-
 function withComponentIds(components) {
-  return components.map((component) => ({
-    id: makeId(),
-    name: component.name,
-    init: String(component.init),
-    outcomes: withOutcomeIds(component.outcomes ?? []),
-    noteEnabled: Boolean(component.noteEnabled),
-    noteLabel: component.noteLabel ?? "",
-  }));
+  return components.map(hydrateDiscreteComponent);
 }
 
 function emptyComponent() {
-  return {
-    id: makeId(),
-    name: "",
-    init: "",
-    outcomes: withOutcomeIds([
-      { offspring: "", probability: "" },
-      { offspring: "", probability: "" },
-    ]),
-    noteEnabled: false,
-    noteLabel: "",
-  };
-}
-
-function parseDiscreteComponents(components) {
-  const parsed = [];
-  const seen = new Set();
-
-  components.forEach((component, index) => {
-    const name = component.name.trim();
-    const initText = String(component.init ?? "").trim();
-    const hasOutcomeInput = component.outcomes.some(
-      (outcome) =>
-        String(outcome.offspring ?? "").trim() ||
-        String(outcome.probability ?? "").trim(),
-    );
-    const isEmpty = !name && !initText && !hasOutcomeInput;
-
-    if (isEmpty) return;
-    if (!name) {
-      throw new Error(`Variable row ${index + 1}: missing variable name.`);
-    }
-    if (seen.has(name)) {
-      throw new Error(
-        `Variable row ${index + 1}: duplicate variable "${name}".`,
-      );
-    }
-    seen.add(name);
-
-    const init = Number(initText);
-    if (!Number.isInteger(init) || init < 0) {
-      throw new Error(
-        `Variable row ${index + 1}: initial value must be a non-negative integer.`,
-      );
-    }
-    const outcomes = component.outcomes.map((outcome, outcomeIndex) => {
-      const offspringText = String(outcome.offspring ?? "").trim();
-      const probabilityText = String(outcome.probability ?? "").trim();
-      if (!offspringText || !probabilityText) {
-        throw new Error(
-          `Variable row ${index + 1}, outcome ${outcomeIndex + 1}: enter both offspring and probability.`,
-        );
-      }
-      const offspring = Number(offspringText);
-      const probability = Number(probabilityText);
-
-      if (!Number.isInteger(offspring) || offspring < 0) {
-        throw new Error(
-          `Variable row ${index + 1}, outcome ${outcomeIndex + 1}: offspring must be a non-negative integer.`,
-        );
-      }
-      if (
-        !Number.isFinite(probability) ||
-        probability < 0 ||
-        probability > 1
-      ) {
-        throw new Error(
-          `Variable row ${index + 1}, outcome ${outcomeIndex + 1}: probability must be between 0 and 1.`,
-        );
-      }
-      return { offspring, probability };
-    });
-
-    if (outcomes.length === 0) {
-      throw new Error(`Variable row ${index + 1}: add at least one outcome.`);
-    }
-
-    const uniqueOffspring = new Set(outcomes.map((outcome) => outcome.offspring));
-    if (uniqueOffspring.size !== outcomes.length) {
-      throw new Error(
-        `Variable row ${index + 1}: offspring outcomes must be unique.`,
-      );
-    }
-
-    const probabilityTotal = outcomes.reduce(
-      (total, outcome) => total + outcome.probability,
-      0,
-    );
-    if (Math.abs(probabilityTotal - 1) > 1e-9) {
-      throw new Error(
-        `Variable row ${index + 1}: probabilities must total 1 (currently ${probabilityTotal.toFixed(4)}).`,
-      );
-    }
-
-    parsed.push({ name, init, outcomes });
-  });
-
-  if (parsed.length === 0) {
-    throw new Error("Please define at least one variable.");
-  }
-  return parsed;
+  return hydrateDiscreteComponent();
 }
 
 function buildLegendLabel(variableName, noteEnabled, noteLabel) {
@@ -238,61 +122,8 @@ export default function DiscreteTimeSimulator({
     [variableLegendPreview],
   );
 
-  const updateComponent = (id, field, value) => {
-    setComponents((rows) =>
-      rows.map((row) => (row.id === id ? { ...row, [field]: value } : row)),
-    );
-  };
-
-  const updateOutcome = (componentId, outcomeId, field, value) => {
-    setComponents((rows) =>
-      rows.map((component) =>
-        component.id === componentId
-          ? {
-              ...component,
-              outcomes: component.outcomes.map((outcome) =>
-                outcome.id === outcomeId
-                  ? { ...outcome, [field]: value }
-                  : outcome,
-              ),
-            }
-          : component,
-      ),
-    );
-  };
-
-  const addOutcome = (componentId) => {
-    setComponents((rows) =>
-      rows.map((component) =>
-        component.id === componentId
-          ? {
-              ...component,
-              outcomes: [
-                ...component.outcomes,
-                { id: makeId(), offspring: "", probability: "" },
-              ],
-            }
-          : component,
-      ),
-    );
-  };
-
-  const removeOutcome = (componentId, outcomeId) => {
-    setComponents((rows) =>
-      rows.map((component) => {
-        if (component.id !== componentId) return component;
-        const nextOutcomes = component.outcomes.filter(
-          (outcome) => outcome.id !== outcomeId,
-        );
-        return {
-          ...component,
-          outcomes:
-            nextOutcomes.length > 0
-              ? nextOutcomes
-              : [{ id: makeId(), offspring: "", probability: "" }],
-        };
-      }),
-    );
+  const updateComponent = (id, component) => {
+    setComponents((rows) => rows.map((row) => row.id === id ? component : row));
   };
 
   const addComponent = () => {
@@ -366,8 +197,8 @@ export default function DiscreteTimeSimulator({
       datasets: chartDatasets,
       legendItems,
       xMax: chartXMax,
-      xLabel: "Generation",
-      yLabel: "Count",
+      xLabel: "Step",
+      yLabel: "State",
       xTickAutoSkip: false,
       showLegend: true,
     }),
@@ -391,7 +222,7 @@ export default function DiscreteTimeSimulator({
         const variableNames = parsedComponents.map((component) => component.name);
         const compiledComponents = parsedComponents.map(
           (component) =>
-            new DiscreteTimeComponent(component.name, component.outcomes),
+            new DiscreteTimeComponent(component.name, component.outcomes, component),
         );
 
         const generationCount = Number(generations);
@@ -470,7 +301,7 @@ export default function DiscreteTimeSimulator({
 
         setChartDatasets(datasets);
         setChartXMax(generationCount);
-        setStats(`${generationCount} generations · ${runCount} runs`);
+        setStats(`${generationCount} steps · ${runCount} runs`);
       } catch (runError) {
         setError(runError.message);
       } finally {
@@ -487,237 +318,30 @@ export default function DiscreteTimeSimulator({
             <section className="border-b border-slate-300">
               <div className="border-b border-slate-300 bg-slate-200 px-3 py-2.5">
                 <div className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
-                  Independent transitions
+                  Discrete-time models
                 </div>
                 <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">
-                  At each generation, every individual independently produces
-                  one of the offspring counts below. Probabilities must total 1.
+                  Choose how each variable changes at each step. Variables
+                  evolve independently; probabilities must total 1.
                 </p>
               </div>
 
-              {components.map((component, index) => {
-                const probabilityTotal = component.outcomes.reduce(
-                  (total, outcome) =>
-                    total + (Number(outcome.probability) || 0),
-                  0,
-                );
-                const probabilityIsComplete =
-                  Math.abs(probabilityTotal - 1) <= 1e-9;
-
-                return (
-                  <div
-                    key={component.id}
-                    className="grid grid-cols-[46px_1fr_36px] border-b border-slate-300 bg-slate-100"
-                  >
-                    <div className="relative flex items-start justify-center border-r border-slate-300 pt-2 text-xs text-slate-500">
-                      <span
-                        className="absolute left-1 top-1/2 h-6 w-[15px] -translate-y-1/2 rounded-[2px]"
-                        style={{
-                          backgroundColor: getSeriesColor(
-                            DISCRETE_TIME_SERIES_COLORS,
-                            index,
-                          ),
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() =>
-                          updateComponent(
-                            component.id,
-                            "noteEnabled",
-                            !component.noteEnabled,
-                          )
-                        }
-                        aria-label="Toggle variable label"
-                        aria-pressed={component.noteEnabled}
-                        className={`rounded transition ${
-                          component.noteEnabled
-                            ? "text-slate-700"
-                            : "text-slate-400 hover:text-slate-600"
-                        }`}
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          strokeWidth={1.5}
-                          stroke="currentColor"
-                          className="size-5"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"
-                          />
-                        </svg>
-                      </button>
-                    </div>
-
-                    <div className="flex w-full flex-col overflow-hidden p-2.5 pb-3">
-                      {component.noteEnabled && (
-                        <div className="mb-1 flex justify-end">
-                          <input
-                            type="text"
-                            value={component.noteLabel ?? ""}
-                            onChange={(event) =>
-                              updateComponent(
-                                component.id,
-                                "noteLabel",
-                                event.target.value,
-                              )
-                            }
-                            spellCheck={false}
-                            className="max-w-full bg-transparent px-1 text-right text-sm font-semibold text-slate-600 outline-none"
-                            placeholder="Add label"
-                          />
-                        </div>
-                      )}
-
-                      <div className="mb-2 flex justify-between px-0.5 text-[9px] font-semibold tracking-wide text-slate-400">
-                        <span>VARIABLE</span>
-                        <span>INITIAL VALUE</span>
-                      </div>
-                      <div className="flex gap-3 sm:gap-8">
-                        <input
-                          type="text"
-                          value={component.name}
-                          onChange={(event) =>
-                            updateComponent(
-                              component.id,
-                              "name",
-                              event.target.value,
-                            )
-                          }
-                          spellCheck={false}
-                          className="min-w-0 flex-1 rounded border border-slate-300 bg-white px-2.5 py-1.5 text-sm"
-                          placeholder="Population"
-                        />
-                        <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          value={component.init}
-                          onChange={(event) =>
-                            updateComponent(
-                              component.id,
-                              "init",
-                              event.target.value,
-                            )
-                          }
-                          className="w-24 rounded border border-slate-300 bg-white px-2.5 py-1.5 text-center text-sm"
-                          placeholder="10"
-                        />
-                      </div>
-
-                      <div className="mt-3 overflow-hidden rounded-lg border border-slate-300 bg-white">
-                        <div className="border-b border-slate-200 bg-slate-50 px-2.5 py-2">
-                          <div className="text-[10px] font-bold uppercase tracking-wide text-emerald-800/80">
-                            Per-individual outcomes
-                          </div>
-                          <p className="mt-0.5 text-[10px] text-slate-500">
-                            One outcome is drawn independently for each current
-                            individual.
-                          </p>
-                        </div>
-
-                        <div className="grid grid-cols-[1fr_96px_28px] gap-2 px-2.5 pb-1 pt-2 text-[9px] font-semibold uppercase tracking-wide text-slate-400">
-                          <span>Offspring</span>
-                          <span>Probability</span>
-                          <span />
-                        </div>
-
-                        {component.outcomes.map((outcome, outcomeIndex) => (
-                          <div
-                            key={outcome.id}
-                            className="grid grid-cols-[1fr_96px_28px] items-center gap-2 border-t border-slate-100 px-2.5 py-1.5 first:border-t-0"
-                          >
-                            <input
-                              type="number"
-                              min="0"
-                              step="1"
-                              value={outcome.offspring}
-                              onChange={(event) =>
-                                updateOutcome(
-                                  component.id,
-                                  outcome.id,
-                                  "offspring",
-                                  event.target.value,
-                                )
-                              }
-                              aria-label={`Outcome ${outcomeIndex + 1} offspring`}
-                              className="min-w-0 rounded border border-slate-300 bg-white px-2 py-1.5 text-sm"
-                              placeholder={outcomeIndex === 0 ? "0" : "2"}
-                            />
-                            <input
-                              type="number"
-                              min="0"
-                              max="1"
-                              step="0.01"
-                              value={outcome.probability}
-                              onChange={(event) =>
-                                updateOutcome(
-                                  component.id,
-                                  outcome.id,
-                                  "probability",
-                                  event.target.value,
-                                )
-                              }
-                              aria-label={`Outcome ${outcomeIndex + 1} probability`}
-                              className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm"
-                              placeholder={outcomeIndex === 0 ? "0.45" : "0.55"}
-                            />
-                            <button
-                              type="button"
-                              onClick={() =>
-                                removeOutcome(component.id, outcome.id)
-                              }
-                              className="flex h-7 w-7 items-center justify-center rounded text-slate-400 transition hover:bg-red-50 hover:text-red-500"
-                              aria-label={`Delete outcome ${outcomeIndex + 1}`}
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        ))}
-
-                        <div className="flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-2.5 py-2">
-                          <button
-                            type="button"
-                            onClick={() => addOutcome(component.id)}
-                            className="text-[11px] font-semibold text-blue-800 hover:text-blue-600"
-                          >
-                            + Add outcome
-                          </button>
-                          <span
-                            className={`text-[10px] font-semibold ${
-                              probabilityIsComplete
-                                ? "text-emerald-700"
-                                : "text-amber-700"
-                            }`}
-                          >
-                            Total: {probabilityTotal.toFixed(2)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => removeComponent(component.id)}
-                      className="flex items-center justify-center border-l border-slate-300 text-slate-400 hover:text-red-500"
-                      aria-label="Delete variable"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                );
-              })}
+              {components.map((component, index) => (
+                <DiscreteComponentEditor
+                  key={component.id}
+                  component={component}
+                  index={index}
+                  onChange={(next) => updateComponent(component.id, next)}
+                  onRemove={() => removeComponent(component.id)}
+                />
+              ))}
 
               <button
                 type="button"
                 onClick={addComponent}
                 className="w-full px-4 py-2 text-left text-sm text-slate-500 transition hover:bg-slate-200 hover:text-slate-700"
               >
-                + Add population
+                + Add variable
               </button>
             </section>
           </div>
@@ -737,8 +361,8 @@ export default function DiscreteTimeSimulator({
               datasets={chartDatasets}
               legendItems={legendItems}
               xMax={chartXMax}
-              xLabel="Generation"
-              yLabel="Count"
+              xLabel="Step"
+              yLabel="State"
               xTickAutoSkip={false}
               showTooltips={parseInt(numSims, 10) <= 1}
             />
@@ -775,13 +399,14 @@ export default function DiscreteTimeSimulator({
 
                 <div className="flex min-w-0 max-w-full items-center gap-2 overflow-x-auto whitespace-nowrap">
                   <label className="text-[11px] text-slate-500">
-                    generations
+                    steps
                   </label>
                   <input
                     type="number"
                     min="1"
                     max="10000"
                     step="1"
+                    aria-label="Steps"
                     value={generations}
                     onChange={(event) => setGenerations(event.target.value)}
                     className="w-20 rounded border border-slate-300 bg-white px-2 py-1 text-xs"
@@ -792,6 +417,7 @@ export default function DiscreteTimeSimulator({
                     min="1"
                     max="200"
                     step="1"
+                    aria-label="Runs"
                     value={numSims}
                     onChange={(event) => setNumSims(event.target.value)}
                     className="w-16 rounded border border-slate-300 bg-white px-2 py-1 text-xs"

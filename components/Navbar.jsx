@@ -1,14 +1,24 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { signOut } from "next-auth/react";
+import { UserRound } from "lucide-react";
 import { ACCOUNT_USERNAME_UPDATED_EVENT } from "@/lib/auth/events";
+import {
+  publishProfileUpdated,
+  subscribeProfileUpdated,
+} from "@/lib/community/events";
+import ProfileImageControl from "@/components/community/ProfileImageControl";
+import {
+  ACCOUNT_DELETION_PHRASE,
+  matchesDeletionPhrase,
+} from "@/lib/account/deletion";
 
-const NAV_LINKS = [
-  { href: "/", label: "Home" },
-];
+const HOME_LINK = { href: "/", label: "Home" };
+const COMMUNITY_LINK = { href: "/community", label: "Community" };
 const EXAMPLE_LINKS = [
   { href: "/examples/food-chain", label: "CTMC Gillespie" },
   { href: "/examples/seasonal-lotka-volterra", label: "CTMP Time Var" },
@@ -32,16 +42,49 @@ export default function Navbar({ sessionUser = null }) {
     sessionUser?.username ?? "",
   );
   const [savingUsername, setSavingUsername] = useState(false);
+  const [profileImage, setProfileImage] = useState(
+    sessionUser?.profileImage ?? null,
+  );
+  const [communityHidden, setCommunityHidden] = useState(
+    sessionUser?.communityHidden === true,
+  );
+  const [savingVisibility, setSavingVisibility] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const deleteDialogRef = useRef(null);
   const [sendingResetEmail, setSendingResetEmail] = useState(false);
   const [settingsError, setSettingsError] = useState("");
   const [settingsSuccess, setSettingsSuccess] = useState("");
   const examplesMenuRef = useRef(null);
   const profileMenuRef = useRef(null);
 
+  const closeDeleteDialog = () => {
+    setDeleteOpen(false);
+    setDeleteConfirmation("");
+    setDeleteError("");
+  };
+
   useEffect(() => {
     setCurrentUsername(sessionUser?.username ?? "");
     setDraftUsername(sessionUser?.username ?? "");
   }, [sessionUser?.username]);
+
+  useEffect(() => {
+    setProfileImage(sessionUser?.profileImage ?? null);
+    setCommunityHidden(sessionUser?.communityHidden === true);
+  }, [sessionUser?.profileImage, sessionUser?.communityHidden]);
+
+  useEffect(
+    () =>
+      subscribeProfileUpdated((profile) => {
+        if (!profile) return;
+        setProfileImage(profile.profileImage ?? null);
+        setCommunityHidden(profile.communityHidden === true);
+      }),
+    [],
+  );
 
   useEffect(() => {
     if (!profileOpen) {
@@ -103,6 +146,17 @@ export default function Navbar({ sessionUser = null }) {
     };
   }, [examplesOpen]);
 
+  useEffect(() => {
+    const dialog = deleteDialogRef.current;
+    if (!dialog) return;
+
+    if (deleteOpen && !dialog.open) {
+      dialog.showModal();
+    } else if (!deleteOpen && dialog.open) {
+      dialog.close();
+    }
+  }, [deleteOpen]);
+
   const handleSignOut = async () => {
     setSigningOut(true);
     try {
@@ -119,6 +173,8 @@ export default function Navbar({ sessionUser = null }) {
     setExamplesOpen(false);
     setSettingsError("");
     setSettingsSuccess("");
+    setDeleteOpen(false);
+    setDeleteConfirmation("");
   };
 
   const handleOpenExamples = () => {
@@ -177,6 +233,69 @@ export default function Navbar({ sessionUser = null }) {
       setSettingsError(error.message || "Failed to update username.");
     } finally {
       setSavingUsername(false);
+    }
+  };
+
+  const handleToggleCommunity = async () => {
+    const nextHidden = !communityHidden;
+    setSavingVisibility(true);
+    setSettingsError("");
+    setSettingsSuccess("");
+
+    try {
+      const response = await fetch("/api/account/community-visibility", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hidden: nextHidden }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to update community visibility.");
+      }
+
+      const profile = await response.json();
+      setCommunityHidden(profile.communityHidden === true);
+      publishProfileUpdated(profile);
+      setSettingsSuccess(
+        profile.communityHidden
+          ? "Hidden from the community page."
+          : "Showing on the community page.",
+      );
+      router.refresh();
+    } catch (error) {
+      setSettingsError(error.message || "Failed to update community visibility.");
+    } finally {
+      setSavingVisibility(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!matchesDeletionPhrase(deleteConfirmation)) {
+      return;
+    }
+
+    setDeletingAccount(true);
+    setSettingsError("");
+    setSettingsSuccess("");
+
+    try {
+      const response = await fetch("/api/account", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmation: deleteConfirmation }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to delete the account.");
+      }
+
+      // The record is gone; drop the session cookie and leave the app.
+      await signOut({ redirectTo: "/", redirect: true });
+    } catch (error) {
+      setDeleteError(error.message || "Failed to delete the account.");
+      setDeletingAccount(false);
     }
   };
 
@@ -260,26 +379,20 @@ export default function Navbar({ sessionUser = null }) {
         </Link>
 
         <div className="hidden md:flex items-center gap-2">
-          {NAV_LINKS.map(({ href, label }) => {
-            const isActive = pathname === href;
-            return (
-              <Link
-                key={href}
-                href={href}
-                onClick={() => {
-                  setExamplesOpen(false);
-                  setProfileOpen(false);
-                }}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition whitespace-nowrap ${
-                  isActive
-                    ? "bg-blue-900 text-white"
-                    : "text-slate-300 hover:bg-slate-700 hover:text-white"
-                }`}
-              >
-                {label}
-              </Link>
-            );
-          })}
+          <Link
+            href={HOME_LINK.href}
+            onClick={() => {
+              setExamplesOpen(false);
+              setProfileOpen(false);
+            }}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition whitespace-nowrap ${
+              pathname === HOME_LINK.href
+                ? "bg-blue-900 text-white"
+                : "text-slate-300 hover:bg-slate-700 hover:text-white"
+            }`}
+          >
+            {HOME_LINK.label}
+          </Link>
 
           <div ref={examplesMenuRef} className="relative">
             <button
@@ -340,6 +453,21 @@ export default function Navbar({ sessionUser = null }) {
               </div>
             )}
           </div>
+
+          <Link
+            href={COMMUNITY_LINK.href}
+            onClick={() => {
+              setExamplesOpen(false);
+              setProfileOpen(false);
+            }}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition whitespace-nowrap ${
+              pathname === COMMUNITY_LINK.href
+                ? "bg-blue-900 text-white"
+                : "text-slate-300 hover:bg-slate-700 hover:text-white"
+            }`}
+          >
+            {COMMUNITY_LINK.label}
+          </Link>
 
           {sessionUser && currentUsername ? (
             <>
@@ -425,7 +553,7 @@ export default function Navbar({ sessionUser = null }) {
       {sessionUser && profileOpen && (
         <div
           ref={profileMenuRef}
-          className="absolute right-4 top-16 z-[60] w-[320px] rounded-xl border border-slate-700 bg-slate-900/95 p-4 shadow-xl backdrop-blur"
+          className="absolute right-4 top-16 z-[60] max-h-[calc(100vh-5rem)] w-[320px] overflow-y-auto rounded-xl border border-slate-700 bg-slate-900/95 p-4 shadow-xl backdrop-blur"
         >
           <div className="mb-3 border-b border-slate-700 pb-3">
             <p className="text-sm font-semibold text-white">Profile Settings</p>
@@ -458,11 +586,75 @@ export default function Navbar({ sessionUser = null }) {
             </button>
           </form>
 
+          <div className="mt-3 border-t border-slate-700 pt-3">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              Profile Picture
+            </p>
+            <div className="flex items-center gap-3">
+              <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md border border-slate-600 bg-slate-800">
+                {profileImage?.imageUrl ? (
+                  <Image
+                    key={profileImage.imageUrl}
+                    src={profileImage.imageUrl}
+                    alt="Your profile picture"
+                    fill
+                    sizes="56px"
+                    className="object-cover"
+                    placeholder={profileImage.blurDataURL ? "blur" : "empty"}
+                    blurDataURL={profileImage.blurDataURL || undefined}
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center">
+                    <UserRound
+                      className="h-6 w-6 text-slate-500"
+                      aria-hidden="true"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <ProfileImageControl
+                  hasImage={Boolean(profileImage?.imageUrl)}
+                  onDone={() => router.refresh()}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-1 flex items-start justify-between gap-3 border-t border-slate-700 pt-3">
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-slate-200">
+                Show on community page
+              </p>
+              <p className="mt-0.5 text-[11px] leading-snug text-slate-400">
+                Your card appears once you save a model.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={!communityHidden}
+              aria-label="Show me on the community page"
+              onClick={handleToggleCommunity}
+              disabled={savingVisibility}
+              className={`relative mt-0.5 h-5 w-9 shrink-0 rounded-full transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                communityHidden ? "bg-slate-600" : "bg-blue-700"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${
+                  communityHidden ? "left-0.5" : "left-[18px]"
+                }`}
+              />
+            </button>
+          </div>
+
           <button
             type="button"
             onClick={handleSendPasswordReset}
             disabled={sendingResetEmail}
-            className="mt-2 w-full rounded-sm border border-slate-600 px-3 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="mt-3 w-full rounded-sm border border-slate-600 px-3 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {sendingResetEmail ? "Sending Reset Link..." : "Change Password"}
           </button>
@@ -482,34 +674,120 @@ export default function Navbar({ sessionUser = null }) {
               <p className="text-emerald-300">{settingsSuccess}</p>
             )}
           </div>
+
+          <div className="mt-2 border-t border-slate-700 pt-3">
+            <button
+              type="button"
+              onClick={() => {
+                setDeleteConfirmation("");
+                setDeleteError("");
+                setSettingsError("");
+                setSettingsSuccess("");
+                setDeleteOpen(true);
+                setProfileOpen(false);
+              }}
+              className="w-full rounded-sm px-3 py-2 text-xs font-medium text-slate-400 transition hover:bg-red-950/40 hover:text-red-200"
+            >
+              Delete my account
+            </button>
+          </div>
         </div>
       )}
+
+      <dialog
+        ref={deleteDialogRef}
+        onClose={closeDeleteDialog}
+        onCancel={(event) => {
+          if (deletingAccount) event.preventDefault();
+        }}
+        onClick={(event) => {
+          if (event.target === event.currentTarget && !deletingAccount) {
+            closeDeleteDialog();
+          }
+        }}
+        aria-labelledby="delete-account-title"
+        className="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-0 text-slate-100 shadow-2xl backdrop:bg-slate-950/70 backdrop:backdrop-blur-sm"
+      >
+        <div className="p-5 sm:p-6">
+          <h2
+            id="delete-account-title"
+            className="text-lg font-bold tracking-tight text-red-200"
+          >
+            This cannot be undone.
+          </h2>
+          <p className="mt-2 text-sm leading-relaxed text-slate-300">
+            Your account, saved models, preview images and profile picture are
+            permanently deleted.
+          </p>
+
+          <label
+            htmlFor="delete-account-confirm"
+            className="mt-5 block text-sm text-slate-300"
+          >
+            Type{" "}
+            <span className="font-semibold text-red-200">
+              {ACCOUNT_DELETION_PHRASE}
+            </span>{" "}
+            to confirm
+          </label>
+          <input
+            id="delete-account-confirm"
+            type="text"
+            value={deleteConfirmation}
+            onChange={(event) => setDeleteConfirmation(event.target.value)}
+            autoComplete="off"
+            spellCheck={false}
+            disabled={deletingAccount}
+            placeholder={ACCOUNT_DELETION_PHRASE}
+            className="mt-2 w-full rounded-lg border border-slate-600 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none transition focus:border-red-600 focus:ring-2 focus:ring-red-900/60 disabled:opacity-60 placeholder:text-slate-600"
+          />
+
+          <div className="mt-3 min-h-4 text-xs" aria-live="polite">
+            {deleteError && <p className="text-red-300">{deleteError}</p>}
+          </div>
+
+          <div className="mt-3 flex flex-col-reverse gap-2 sm:flex-row">
+            <button
+              type="button"
+              onClick={closeDeleteDialog}
+              disabled={deletingAccount}
+              className="flex-1 rounded-lg border border-slate-600 px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleDeleteAccount}
+              disabled={
+                deletingAccount || !matchesDeletionPhrase(deleteConfirmation)
+              }
+              className="flex-1 rounded-lg bg-red-800 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+            >
+              {deletingAccount ? "Deleting..." : "Delete forever"}
+            </button>
+          </div>
+        </div>
+      </dialog>
 
       {menuOpen && (
         <div
           id="mobile-nav-menu"
           className="md:hidden absolute top-14 left-0 right-0 bg-slate-800 shadow-lg border-t border-slate-700 z-50"
         >
-          {NAV_LINKS.map(({ href, label }) => {
-            const isActive = pathname === href;
-            return (
-              <Link
-                key={href}
-                href={href}
-                onClick={() => {
-                  setMenuOpen(false);
-                  setProfileOpen(false);
-                }}
-                className={`block px-4 py-3 text-sm font-medium border-b border-slate-700 last:border-b-0 transition ${
-                  isActive
-                    ? "bg-blue-900 text-white"
-                    : "text-slate-300 hover:bg-slate-700 hover:text-white"
-                }`}
-              >
-                {label}
-              </Link>
-            );
-          })}
+          <Link
+            href={HOME_LINK.href}
+            onClick={() => {
+              setMenuOpen(false);
+              setProfileOpen(false);
+            }}
+            className={`block px-4 py-3 text-sm font-medium border-b border-slate-700 transition ${
+              pathname === HOME_LINK.href
+                ? "bg-blue-900 text-white"
+                : "text-slate-300 hover:bg-slate-700 hover:text-white"
+            }`}
+          >
+            {HOME_LINK.label}
+          </Link>
 
           <button
             type="button"
@@ -568,6 +846,21 @@ export default function Navbar({ sessionUser = null }) {
               })}
             </div>
           )}
+
+          <Link
+            href={COMMUNITY_LINK.href}
+            onClick={() => {
+              setMenuOpen(false);
+              setProfileOpen(false);
+            }}
+            className={`block px-4 py-3 text-sm font-medium border-b border-slate-700 transition ${
+              pathname === COMMUNITY_LINK.href
+                ? "bg-blue-900 text-white"
+                : "text-slate-300 hover:bg-slate-700 hover:text-white"
+            }`}
+          >
+            {COMMUNITY_LINK.label}
+          </Link>
 
           {sessionUser && currentUsername ? (
             <>
