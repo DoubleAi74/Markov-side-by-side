@@ -44,7 +44,7 @@ export default function HomePage() {
       {/* Hero */}
       <div className="text-center mb-8 md:mb-12">
         <h1 className="text-3xl md:text-4xl font-extrabold text-slate-900 mb-3 tracking-tight">
-          Markov Side-by-Side
+          Markov Lab
         </h1>
         <p className="text-base md:text-lg text-slate-500 max-w-2xl mx-auto">
           Simulate any Markov process. Models are covered in four categories.

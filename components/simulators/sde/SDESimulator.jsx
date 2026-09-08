@@ -22,6 +22,7 @@ import {
   serializeSDEState,
 } from "@/lib/saved-simulations/serializers";
 import { X } from "lucide-react";
+import { useRegisterSimulatorType } from "@/components/providers/SimulatorTypeProvider";
 
 const TAB_ITEMS = [
   { id: "vars", label: "Variables" },
@@ -146,6 +147,7 @@ export default function SDESimulator({
   canEditCurrentModel = true,
   startBlank = false,
 }) {
+  useRegisterSimulatorType("sde");
   const initialSavedPayload = useMemo(
     () =>
       initialSavedSimulation

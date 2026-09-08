@@ -9,6 +9,7 @@ import {
   serializeDiscreteTimeState,
 } from "@/lib/saved-simulations/serializers";
 import SaveModelControls from "../shared/SaveModelControls";
+import { useRegisterSimulatorType } from "@/components/providers/SimulatorTypeProvider";
 import SimChart from "../shared/SimChart";
 import {
   buildSimulationResultsCsv,
@@ -61,6 +62,7 @@ export default function DiscreteTimeSimulator({
   canEditCurrentModel = true,
   startBlank = false,
 }) {
+  useRegisterSimulatorType("discrete-time");
   const initialSavedPayload = useMemo(
     () =>
       initialSavedSimulation

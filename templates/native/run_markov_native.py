@@ -1094,7 +1094,7 @@ def run_native_binary(
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        description="Compile and run the Markov Side-by-Side native runner."
+        description="Compile and run the Markov Lab native runner."
     )
     parser.add_argument("--config", required=True, help="Path to exported model JSON.")
     parser.add_argument("--output", help="CSV output path.")

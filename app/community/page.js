@@ -4,8 +4,8 @@ import { buildSessionUser } from "@/lib/auth/session-user";
 import { listCommunityMembers } from "@/lib/community/service";
 
 export const metadata = {
-  title: "Community · Markov Side-by-Side",
-  description: "People sharing stochastic models on Markov Side-by-Side.",
+  title: "Community · Markov Lab",
+  description: "People sharing stochastic models on Markov Lab.",
   robots: {
     index: false,
     follow: false,

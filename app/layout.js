@@ -8,7 +8,7 @@ import { auth } from "@/auth";
 import { buildSessionUser } from "@/lib/auth/session-user";
 
 export const metadata = {
-  title: "Markov Side-by-Side",
+  title: "Markov Lab",
   description:
     "Interactive stochastic simulation tools: CTMC Gillespie, time-dependent CTMP, SDE, and discrete-time solvers.",
   icons: {
@@ -44,8 +44,8 @@ export default async function RootLayout({ children }) {
   return (
     <html lang="en">
       <body className="bg-slate-50 text-slate-800 antialiased">
-        <Navbar sessionUser={sessionUser} />
         <AppClientShell>
+          <Navbar sessionUser={sessionUser} />
           <main>{children}</main>
         </AppClientShell>
       </body>

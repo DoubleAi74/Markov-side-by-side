@@ -1,4 +1,4 @@
-# Markov Side-by-Side
+# Markov Lab
 
 Interactive stochastic simulation tools built with Next.js:
 

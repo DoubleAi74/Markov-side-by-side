@@ -12,6 +12,7 @@ import {
   subscribeProfileUpdated,
 } from "@/lib/community/events";
 import ProfileImageControl from "@/components/community/ProfileImageControl";
+import { useSimulatorTypeLabel } from "@/components/providers/SimulatorTypeProvider";
 import {
   ACCOUNT_DELETION_PHRASE,
   matchesDeletionPhrase,
@@ -31,6 +32,7 @@ const EXAMPLES_TOGGLE_SELECTOR = '[data-examples-toggle="true"]';
 export default function Navbar({ sessionUser = null }) {
   const pathname = usePathname();
   const router = useRouter();
+  const simulatorLabel = useSimulatorTypeLabel();
   const [menuOpen, setMenuOpen] = useState(false);
   const [examplesOpen, setExamplesOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -366,17 +368,29 @@ export default function Navbar({ sessionUser = null }) {
   return (
     <nav className="sticky top-0 z-50 h-14 bg-slate-900 text-white shadow-md relative">
       <div className="max-w-[1400px] mx-auto px-4 h-full flex items-center justify-between">
-        <Link
-          href="/"
-          className="text-base md:text-lg font-bold tracking-tight text-white hover:text-blue-300 transition"
-          onClick={() => {
-            setMenuOpen(false);
-            setExamplesOpen(false);
-            setProfileOpen(false);
-          }}
-        >
-          Markov Side-by-Side
-        </Link>
+        <div className="flex min-w-0 items-center gap-2 pr-3">
+          <Link
+            href="/"
+            className="shrink-0 text-base md:text-lg font-bold tracking-tight text-white hover:text-blue-300 transition"
+            onClick={() => {
+              setMenuOpen(false);
+              setExamplesOpen(false);
+              setProfileOpen(false);
+            }}
+          >
+            Markov Lab
+          </Link>
+          {simulatorLabel ? (
+            <span className="flex min-w-0 items-center gap-2 text-slate-300">
+              <span className="hidden text-slate-500 sm:inline" aria-hidden="true">
+                ·
+              </span>
+              <span className="truncate text-xs font-medium sm:text-sm sm:font-semibold">
+                {simulatorLabel}
+              </span>
+            </span>
+          ) : null}
+        </div>
 
         <div className="hidden md:flex items-center gap-2">
           <Link

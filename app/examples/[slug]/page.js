@@ -19,7 +19,7 @@ export async function generateMetadata({ params }) {
   }
 
   return {
-    title: `${example.name} · Markov Side-by-Side`,
+    title: `${example.name} · Markov Lab`,
     description: example.description,
   };
 }
