@@ -6,15 +6,16 @@ This is a **Next.js web app** that provides interactive tools for running stocha
 
 ## What It Does
 
-The app offers three types of mathematical simulators:
+The app offers four types of mathematical simulators:
 
 | Simulator             | Page           | What it models                                             |
 | --------------------- | -------------- | ---------------------------------------------------------- |
 | **Gillespie**         | `/gillespie`   | Exact random events in a chemical/biological system (CTMC) |
 | **Time-Varying CTMP** | `/ctmp-inhomo` | Same as Gillespie but rates can change over time           |
 | **SDE Solver**        | `/sde`         | Stochastic differential equations (continuous noise)       |
+| **Discrete Time**     | `/discrete-time` | Integer-valued processes updated once per generation      |
 
-All three share the same pattern: the user defines variables, parameters, and equations in a text-based editor, runs the simulation, and sees trajectories plotted on a chart.
+All four share the same pattern: the user defines variables, parameters, and equations in a text-based editor, runs the simulation, and sees trajectories plotted on a chart.
 
 ---
 
@@ -155,7 +156,7 @@ Stores a user's saved simulator configuration.
 
 ```
 userId          → who owns this model
-simulatorType   → "gillespie" | "ctmp-inhomo" | "sde"
+simulatorType   → "gillespie" | "ctmp-inhomo" | "sde" | "discrete-time"
 name            → display name (max 120 chars)
 description     → optional notes (max 500 chars)
 payload         → the full editor state (variables, params, equations, settings)

@@ -10,6 +10,8 @@ import {
 } from "react";
 import { generateSavedSimulationChartPreview } from "@/lib/previews/chartPreview";
 import { SAVED_SIMULATION_PREVIEW_UPDATED_EVENT } from "@/lib/previews/events";
+import { MAX_BLUR_DATA_URL_LENGTH } from "@/lib/previews/limits";
+import { publishSavedSimulationUpserted } from "@/lib/saved-simulations/tab-sync";
 
 const PreviewUploadContext = createContext(null);
 
@@ -56,6 +58,11 @@ export function PreviewUploadProvider({ children }) {
     (async () => {
       try {
         const preview = await generateSavedSimulationChartPreview(nextJob.chart);
+        const blurDataURL =
+          typeof preview.blurDataURL === "string" &&
+          preview.blurDataURL.length <= MAX_BLUR_DATA_URL_LENGTH
+            ? preview.blurDataURL
+            : null;
         const response = await fetch(
           `/api/saved-simulations/${nextJob.savedSimulationId}/preview`,
           {
@@ -65,7 +72,7 @@ export function PreviewUploadProvider({ children }) {
             },
             body: JSON.stringify({
               imageDataUrl: preview.dataUrl,
-              blurDataURL: preview.blurDataURL,
+              ...(blurDataURL ? { blurDataURL } : {}),
             }),
           },
         );
@@ -86,6 +93,12 @@ export function PreviewUploadProvider({ children }) {
               },
             }),
           );
+          if (updated?.userId && updated?.id) {
+            publishSavedSimulationUpserted({
+              userId: updated.userId,
+              savedSimulation: updated,
+            });
+          }
         }
       } catch (error) {
         console.error("[preview-upload]", error);

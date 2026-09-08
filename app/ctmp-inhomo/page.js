@@ -9,6 +9,7 @@ export default async function CTMPInhomoPage({ searchParams }) {
   const sessionUser = await buildSessionUser(session, { ensureUsername: true });
   const params = await searchParams;
   const modelId = typeof params?.model === "string" ? params.model : null;
+  const startBlank = !modelId && params?.blank === "1";
   let initialSavedSimulation = null;
 
   if (modelId) {
@@ -35,6 +36,7 @@ export default async function CTMPInhomoPage({ searchParams }) {
     <CTMPInhomoSimulator
       sessionUser={sessionUser}
       initialSavedSimulation={initialSavedSimulation}
+      startBlank={startBlank}
     />
   );
 }

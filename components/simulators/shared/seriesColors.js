@@ -25,6 +25,15 @@ export const SDE_SERIES_COLORS = [
   "#0891b2",
 ];
 
+export const DISCRETE_TIME_SERIES_COLORS = [
+  "#0f766e",
+  "#ea580c",
+  "#7c3aed",
+  "#2563eb",
+  "#dc2626",
+  "#65a30d",
+];
+
 function normalizeHex(hex) {
   if (typeof hex !== "string") return null;
   const value = hex.trim();

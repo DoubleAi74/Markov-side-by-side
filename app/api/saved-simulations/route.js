@@ -69,7 +69,7 @@ export async function POST(request) {
     const created = await createSavedSimulationForUser(sessionUser.id, input);
     return NextResponse.json(created, { status: 201 });
   } catch (error) {
-    if (error instanceof ValidationError) {
+    if (error instanceof ValidationError || error?.name === "ValidationError") {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 

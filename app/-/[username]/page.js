@@ -41,6 +41,7 @@ export default async function UserDashboardPage({ params }) {
   return (
     <UserDashboardShell
       ownerUsername={publicDashboard.owner.username}
+      ownerUserId={publicDashboard.owner.id}
       initialItems={publicDashboard.items}
       isOwner={isOwner}
       sessionEmail={isOwner ? sessionUser.email : null}

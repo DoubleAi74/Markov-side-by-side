@@ -10,7 +10,7 @@ import { buildSessionUser } from "@/lib/auth/session-user";
 export const metadata = {
   title: "Markov Side-by-Side",
   description:
-    "Interactive stochastic simulation tools: CTMC Gillespie, time-dependent CTMP, and SDE solver.",
+    "Interactive stochastic simulation tools: CTMC Gillespie, time-dependent CTMP, SDE, and discrete-time solvers.",
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },

@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getNativeBundleFilename } from "@/lib/exports/config";
-import { createNativeBundle } from "@/lib/exports/native-bundle";
+import {
+  NativeExportUnsupportedError,
+  createNativeBundle,
+} from "@/lib/exports/native-bundle";
 import { getSavedSimulationForUser } from "@/lib/saved-simulations/service";
 
 export const runtime = "nodejs";
@@ -44,6 +47,10 @@ export async function GET(_request, { params }) {
       },
     });
   } catch (error) {
+    if (error instanceof NativeExportUnsupportedError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
     return NextResponse.json(
       { error: error.message || "Failed to export native bundle." },
       { status: 500 },

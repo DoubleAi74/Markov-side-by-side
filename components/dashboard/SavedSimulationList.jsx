@@ -5,11 +5,17 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Trash2, X, Activity } from "lucide-react";
 import { SAVED_SIMULATION_PREVIEW_UPDATED_EVENT } from "@/lib/previews/events";
+import {
+  SAVED_SIMULATION_TAB_EVENT,
+  publishSavedSimulationDeleted,
+  subscribeSavedSimulationTabEvents,
+} from "@/lib/saved-simulations/tab-sync";
 
 const ROUTE_BY_SIMULATOR = {
   gillespie: "/gillespie",
   "ctmp-inhomo": "/ctmp-inhomo",
   sde: "/sde",
+  "discrete-time": "/discrete-time",
 };
 
 const CARD_IMAGE_SIZES =
@@ -19,7 +25,9 @@ const CARD_IMAGE_SIZES =
 function formatSimulatorLabel(simulatorType) {
   if (simulatorType === "gillespie") return "CTMC Gillespie";
   if (simulatorType === "ctmp-inhomo") return "CTMP Time Var";
-  return "SDE Solver";
+  if (simulatorType === "sde") return "SDE Solver";
+  if (simulatorType === "discrete-time") return "Discrete Time";
+  return "Unknown";
 }
 
 function buildModelHref(item, profileUsername) {
@@ -119,9 +127,29 @@ function SimulationCard({ item, profileUsername, allowDelete, onDelete, deleting
   );
 }
 
+function upsertSavedSimulation(current, savedSimulation) {
+  if (!savedSimulation?.id) {
+    return current;
+  }
+
+  const index = current.findIndex((item) => item.id === savedSimulation.id);
+  if (index === -1) {
+    return [savedSimulation, ...current];
+  }
+
+  const next = [...current];
+  next[index] = {
+    ...next[index],
+    ...savedSimulation,
+    preview: savedSimulation.preview ?? next[index].preview ?? null,
+  };
+  return next;
+}
+
 export default function SavedSimulationList({
   initialItems = [],
   profileUsername = null,
+  ownerUserId = null,
   allowDelete = true,
 }) {
   const [items, setItems] = useState(initialItems);
@@ -139,17 +167,7 @@ export default function SavedSimulationList({
         return;
       }
 
-      setItems((current) =>
-        current.map((item) =>
-          item.id === savedSimulation.id
-            ? {
-                ...item,
-                preview: savedSimulation.preview ?? null,
-                updatedAt: savedSimulation.updatedAt ?? item.updatedAt,
-              }
-            : item,
-        ),
-      );
+      setItems((current) => upsertSavedSimulation(current, savedSimulation));
     };
 
     window.addEventListener(
@@ -162,6 +180,31 @@ export default function SavedSimulationList({
         handlePreviewUpdated,
       );
   }, []);
+
+  useEffect(() => {
+    if (!ownerUserId) {
+      return undefined;
+    }
+
+    return subscribeSavedSimulationTabEvents((event) => {
+      if (event.userId !== ownerUserId) {
+        return;
+      }
+
+      if (event.type === SAVED_SIMULATION_TAB_EVENT.DELETED) {
+        setItems((current) =>
+          current.filter((item) => item.id !== event.id),
+        );
+        return;
+      }
+
+      if (event.type === SAVED_SIMULATION_TAB_EVENT.UPSERTED) {
+        setItems((current) =>
+          upsertSavedSimulation(current, event.savedSimulation),
+        );
+      }
+    });
+  }, [ownerUserId]);
 
   const sortedItems = useMemo(
     () =>
@@ -188,6 +231,12 @@ export default function SavedSimulationList({
       }
 
       setItems((current) => current.filter((item) => item.id !== id));
+      if (ownerUserId) {
+        publishSavedSimulationDeleted({
+          userId: ownerUserId,
+          id,
+        });
+      }
     } catch (deleteError) {
       setError(deleteError.message || "Failed to delete saved simulation.");
     } finally {
@@ -211,7 +260,7 @@ export default function SavedSimulationList({
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 xl:grid-cols-5">
         {sortedItems.map((item) => (
           <SimulationCard
             key={item.id}

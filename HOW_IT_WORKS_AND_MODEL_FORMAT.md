@@ -1,10 +1,11 @@
 # How It Works And Model Format
 
-This app is a browser-based stochastic simulation tool with three simulators:
+This app is a browser-based stochastic simulation tool with four simulators:
 
 - `gillespie`: exact CTMC / Gillespie simulation
 - `ctmp-inhomo`: time-varying CTMP with helper functions of time
 - `sde`: stochastic differential equations solved with Euler-Maruyama
+- `discrete-time`: integer-valued processes updated once per generation
 
 Users type models into editor fields, run the simulation in the browser, and see the result on a chart. If they are logged in, they can save the model and reopen it later.
 
@@ -245,6 +246,35 @@ Difference from the other two:
 
 So SDE is a little more structured and a little less text-row based.
 
+### 4. Discrete Time
+
+Saved payload:
+
+```json
+{
+  "components": [
+    {
+      "name": "Population",
+      "init": 10,
+      "outcomes": [
+        { "offspring": 0, "probability": 0.45 },
+        { "offspring": 2, "probability": 0.55 }
+      ],
+      "noteEnabled": false,
+      "noteLabel": ""
+    }
+  ],
+  "settings": {
+    "generations": 30,
+    "numSims": 12
+  }
+}
+```
+
+Each component has a non-negative integer initial value and a list of
+independent per-individual outcomes. Each outcome specifies its offspring
+count and probability, and the probabilities for a component must total 1.
+
 ## What Is Not Saved In The Main Model Format
 
 These are not the core saved-model payload:
@@ -264,6 +294,7 @@ The text strings follow simple conventions:
 - CTMP helper functions: `Season(t) = 1 + A*sin(w*t)`
 - transitions: rate expression + delta vector
 - SDE components: stored structurally, not as one text line in the saved payload
+- discrete-time components: `name`, integer `init`, and independent offspring outcomes
 
 The user sees text, but the app saves a JSON representation of that text.
 

@@ -8,16 +8,21 @@ import { ACCOUNT_USERNAME_UPDATED_EVENT } from "@/lib/auth/events";
 
 const NAV_LINKS = [
   { href: "/", label: "Home" },
-  { href: "/gillespie", label: "CTMC Gillespie" },
-  { href: "/ctmp-inhomo", label: "CTMP Time Var" },
-  { href: "/sde", label: "SDE Solver" },
+];
+const EXAMPLE_LINKS = [
+  { href: "/examples/food-chain", label: "CTMC Gillespie" },
+  { href: "/examples/seasonal-lotka-volterra", label: "CTMP Time Var" },
+  { href: "/examples/stochastic-lotka-volterra", label: "SDE Solver" },
+  { href: "/examples/galton-watson", label: "Discrete Time" },
 ];
 const PROFILE_TOGGLE_SELECTOR = '[data-profile-toggle="true"]';
+const EXAMPLES_TOGGLE_SELECTOR = '[data-examples-toggle="true"]';
 
 export default function Navbar({ sessionUser = null }) {
   const pathname = usePathname();
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [examplesOpen, setExamplesOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [currentUsername, setCurrentUsername] = useState(
@@ -30,6 +35,7 @@ export default function Navbar({ sessionUser = null }) {
   const [sendingResetEmail, setSendingResetEmail] = useState(false);
   const [settingsError, setSettingsError] = useState("");
   const [settingsSuccess, setSettingsSuccess] = useState("");
+  const examplesMenuRef = useRef(null);
   const profileMenuRef = useRef(null);
 
   useEffect(() => {
@@ -67,6 +73,36 @@ export default function Navbar({ sessionUser = null }) {
     };
   }, [profileOpen]);
 
+  useEffect(() => {
+    if (!examplesOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (examplesMenuRef.current?.contains(target)) return;
+      if (target instanceof Element && target.closest(EXAMPLES_TOGGLE_SELECTOR)) {
+        return;
+      }
+      setExamplesOpen(false);
+    };
+
+    const handleEscape = (event) => {
+      if (event.key === "Escape") {
+        setExamplesOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [examplesOpen]);
+
   const handleSignOut = async () => {
     setSigningOut(true);
     try {
@@ -80,8 +116,14 @@ export default function Navbar({ sessionUser = null }) {
   const handleOpenProfile = () => {
     setProfileOpen((prev) => !prev);
     setMenuOpen(false);
+    setExamplesOpen(false);
     setSettingsError("");
     setSettingsSuccess("");
+  };
+
+  const handleOpenExamples = () => {
+    setExamplesOpen((prev) => !prev);
+    setProfileOpen(false);
   };
 
   const handleUsernameSubmit = async (event) => {
@@ -210,6 +252,7 @@ export default function Navbar({ sessionUser = null }) {
           className="text-base md:text-lg font-bold tracking-tight text-white hover:text-blue-300 transition"
           onClick={() => {
             setMenuOpen(false);
+            setExamplesOpen(false);
             setProfileOpen(false);
           }}
         >
@@ -223,7 +266,10 @@ export default function Navbar({ sessionUser = null }) {
               <Link
                 key={href}
                 href={href}
-                onClick={() => setProfileOpen(false)}
+                onClick={() => {
+                  setExamplesOpen(false);
+                  setProfileOpen(false);
+                }}
                 className={`px-3 py-1.5 rounded-md text-sm font-medium transition whitespace-nowrap ${
                   isActive
                     ? "bg-blue-900 text-white"
@@ -234,6 +280,66 @@ export default function Navbar({ sessionUser = null }) {
               </Link>
             );
           })}
+
+          <div ref={examplesMenuRef} className="relative">
+            <button
+              type="button"
+              data-examples-toggle="true"
+              onClick={handleOpenExamples}
+              aria-expanded={examplesOpen}
+              aria-controls="desktop-examples-menu"
+              aria-haspopup="true"
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium transition whitespace-nowrap ${
+                examplesOpen ||
+                pathname.startsWith("/examples/") ||
+                EXAMPLE_LINKS.some(({ href }) => pathname === href)
+                  ? "bg-blue-900 text-white"
+                  : "text-slate-300 hover:bg-slate-700 hover:text-white"
+              }`}
+            >
+              Examples
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                aria-hidden="true"
+                className={`h-4 w-4 transition-transform ${
+                  examplesOpen ? "rotate-180" : ""
+                }`}
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M5.22 7.72a.75.75 0 0 1 1.06 0L10 11.44l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 8.78a.75.75 0 0 1 0-1.06Z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </button>
+
+            {examplesOpen && (
+              <div
+                id="desktop-examples-menu"
+                className="absolute left-0 top-full mt-2 w-max min-w-full overflow-hidden rounded-lg border border-slate-700 bg-slate-800 py-1 shadow-xl"
+              >
+                {EXAMPLE_LINKS.map(({ href, label }) => {
+                  const isActive = pathname === href;
+                  return (
+                    <Link
+                      key={href}
+                      href={href}
+                      onClick={() => setExamplesOpen(false)}
+                      className={`block whitespace-nowrap px-3 py-2 text-sm font-medium transition ${
+                        isActive
+                          ? "bg-blue-900 text-white"
+                          : "text-slate-300 hover:bg-slate-700 hover:text-white"
+                      }`}
+                    >
+                      {label}
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           {sessionUser && currentUsername ? (
             <>
@@ -274,6 +380,7 @@ export default function Navbar({ sessionUser = null }) {
             className="flex items-center justify-center w-9 h-9 rounded-md text-slate-300 hover:bg-slate-700 hover:text-white transition"
             onClick={() => {
               setMenuOpen((prev) => !prev);
+              setExamplesOpen(false);
               setProfileOpen(false);
             }}
             aria-label="Toggle menu"
@@ -403,6 +510,64 @@ export default function Navbar({ sessionUser = null }) {
               </Link>
             );
           })}
+
+          <button
+            type="button"
+            data-examples-toggle="true"
+            onClick={handleOpenExamples}
+            aria-expanded={examplesOpen}
+            aria-controls="mobile-examples-menu"
+            className={`flex w-full items-center justify-between border-b border-slate-700 px-4 py-3 text-sm font-medium transition ${
+              examplesOpen ||
+              pathname.startsWith("/examples/") ||
+              EXAMPLE_LINKS.some(({ href }) => pathname === href)
+                ? "bg-blue-900 text-white"
+                : "text-slate-300 hover:bg-slate-700 hover:text-white"
+            }`}
+          >
+            Examples
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              aria-hidden="true"
+              className={`h-4 w-4 transition-transform ${
+                examplesOpen ? "rotate-180" : ""
+              }`}
+            >
+              <path
+                fillRule="evenodd"
+                d="M5.22 7.72a.75.75 0 0 1 1.06 0L10 11.44l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 8.78a.75.75 0 0 1 0-1.06Z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </button>
+
+          {examplesOpen && (
+            <div id="mobile-examples-menu" className="bg-slate-900/40">
+              {EXAMPLE_LINKS.map(({ href, label }) => {
+                const isActive = pathname === href;
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setExamplesOpen(false);
+                      setProfileOpen(false);
+                    }}
+                    className={`block border-b border-slate-700 py-3 pl-8 pr-4 text-sm font-medium transition ${
+                      isActive
+                        ? "bg-blue-950 text-white"
+                        : "text-slate-300 hover:bg-slate-700 hover:text-white"
+                    }`}
+                  >
+                    {label}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
 
           {sessionUser && currentUsername ? (
             <>

@@ -1,10 +1,10 @@
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
-import GillespieSimulator from "@/components/simulators/gillespie/GillespieSimulator";
+import DiscreteTimeSimulator from "@/components/simulators/discrete-time/DiscreteTimeSimulator";
 import { buildSessionUser } from "@/lib/auth/session-user";
 import { getSavedSimulationForUser } from "@/lib/saved-simulations/service";
 
-export default async function GillespiePage({ searchParams }) {
+export default async function DiscreteTimePage({ searchParams }) {
   const session = await auth();
   const sessionUser = await buildSessionUser(session, { ensureUsername: true });
   const params = await searchParams;
@@ -14,11 +14,19 @@ export default async function GillespiePage({ searchParams }) {
 
   if (modelId) {
     if (!sessionUser?.id) {
-      redirect(`/login?callbackUrl=${encodeURIComponent(`/gillespie?model=${modelId}`)}`);
+      redirect(
+        `/login?callbackUrl=${encodeURIComponent(`/discrete-time?model=${modelId}`)}`,
+      );
     }
 
-    initialSavedSimulation = await getSavedSimulationForUser(modelId, sessionUser.id);
-    if (!initialSavedSimulation || initialSavedSimulation.simulatorType !== "gillespie") {
+    initialSavedSimulation = await getSavedSimulationForUser(
+      modelId,
+      sessionUser.id,
+    );
+    if (
+      !initialSavedSimulation ||
+      initialSavedSimulation.simulatorType !== "discrete-time"
+    ) {
       notFound();
     }
 
@@ -30,7 +38,7 @@ export default async function GillespiePage({ searchParams }) {
   }
 
   return (
-    <GillespieSimulator
+    <DiscreteTimeSimulator
       sessionUser={sessionUser}
       initialSavedSimulation={initialSavedSimulation}
       startBlank={startBlank}

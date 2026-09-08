@@ -83,7 +83,7 @@ export async function PATCH(request, { params }) {
 
     return NextResponse.json(updated);
   } catch (error) {
-    if (error instanceof ValidationError) {
+    if (error instanceof ValidationError || error?.name === "ValidationError") {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 

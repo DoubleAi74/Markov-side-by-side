@@ -9,7 +9,7 @@
  */
 export const generateBlurDataURLFromDrawable = (
   source,
-  { blurWidth = 400, mimeType = "image/jpeg", quality = 0.75 } = {},
+  { blurWidth = 24, mimeType = "image/jpeg", quality = 0.55 } = {},
 ) => {
   const sourceWidth = source?.naturalWidth || source?.width || 0;
   const sourceHeight = source?.naturalHeight || source?.height || 0;
@@ -41,9 +41,9 @@ export const generateBlurDataURLFromDrawable = (
  */
 const generateBlurDataURL = (img) =>
   generateBlurDataURLFromDrawable(img, {
-    blurWidth: 200,
+    blurWidth: 24,
     mimeType: "image/jpeg",
-    quality: 0.6,
+    quality: 0.55,
   });
 
 /**

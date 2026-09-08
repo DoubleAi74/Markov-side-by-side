@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { SIMULATOR_TYPES } from "@/lib/saved-simulations/types";
 
 const SavedSimulationPreviewSchema = new mongoose.Schema(
   {
@@ -51,7 +52,7 @@ const SavedSimulationSchema = new mongoose.Schema(
     simulatorType: {
       type: String,
       required: true,
-      enum: ["gillespie", "ctmp-inhomo", "sde"],
+      enum: SIMULATOR_TYPES,
     },
     name: {
       type: String,
@@ -104,5 +105,22 @@ SavedSimulationSchema.index(
   },
 );
 
-export default mongoose.models.SavedSimulation ||
-  mongoose.model("SavedSimulation", SavedSimulationSchema);
+const MODEL_NAME = "SavedSimulation";
+
+function getSavedSimulationModel() {
+  const existing = mongoose.models[MODEL_NAME];
+  if (existing) {
+    const currentEnum = existing.schema.path("simulatorType")?.enumValues ?? [];
+    const enumIsCurrent =
+      currentEnum.length === SIMULATOR_TYPES.length &&
+      SIMULATOR_TYPES.every((type) => currentEnum.includes(type));
+    if (enumIsCurrent) {
+      return existing;
+    }
+    mongoose.deleteModel(MODEL_NAME);
+  }
+
+  return mongoose.model(MODEL_NAME, SavedSimulationSchema);
+}
+
+export default getSavedSimulationModel();

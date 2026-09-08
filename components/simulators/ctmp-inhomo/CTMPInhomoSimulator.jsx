@@ -118,6 +118,7 @@ export default function CTMPInhomoSimulator({
   initialSavedSimulation = null,
   exportUsername = null,
   canEditCurrentModel = true,
+  startBlank = false,
 }) {
   const initialSavedPayload = useMemo(
     () =>
@@ -129,22 +130,30 @@ export default function CTMPInhomoSimulator({
   const [activeTab, setActiveTab] = useState("vars");
   const [varRows, setVarRows] = useState(() =>
     initialSavedPayload?.varRows ??
-    textToRows(assignmentsToText(PRESETS.seasonal.vars)),
+    (startBlank
+      ? textToRows("")
+      : textToRows(assignmentsToText(PRESETS.seasonal.vars))),
   );
   const [paramRows, setParamRows] = useState(() =>
     initialSavedPayload?.paramRows ??
-    textToRows(assignmentsToText(PRESETS.seasonal.params)),
+    (startBlank
+      ? textToRows("")
+      : textToRows(assignmentsToText(PRESETS.seasonal.params))),
   );
   const [helperRows, setHelperRows] = useState(() =>
     initialSavedPayload?.helperRows ??
-    textToRows(helpersToText(PRESETS.seasonal.helpers)),
+    (startBlank
+      ? textToRows("")
+      : textToRows(helpersToText(PRESETS.seasonal.helpers))),
   );
   const [transitions, setTransitions] = useState(() =>
     initialSavedPayload?.transitions ??
-    withTransitionIds(
-      PRESETS.seasonal.transitions,
-      PRESETS.seasonal.vars.length,
-    ),
+    (startBlank
+      ? withTransitionIds([{ rate: "", deltas: [] }], 0)
+      : withTransitionIds(
+          PRESETS.seasonal.transitions,
+          PRESETS.seasonal.vars.length,
+        )),
   );
 
   const [tMax, setTMax] = useState(
@@ -292,12 +301,28 @@ export default function CTMPInhomoSimulator({
     downloadCsvText(resultsCsv.csvText, resultsCsv.filename);
   }, []);
 
-  const loadPreset = (presetKey) => {
-    const preset = PRESETS[presetKey];
-    setVarRows(textToRows(assignmentsToText(preset.vars)));
-    setParamRows(textToRows(assignmentsToText(preset.params)));
-    setHelperRows(textToRows(helpersToText(preset.helpers)));
-    setTransitions(withTransitionIds(preset.transitions, preset.vars.length));
+  const resetModel = () => {
+    const preset = PRESETS.seasonal;
+    setVarRows(
+      startBlank
+        ? textToRows("")
+        : textToRows(assignmentsToText(preset.vars)),
+    );
+    setParamRows(
+      startBlank
+        ? textToRows("")
+        : textToRows(assignmentsToText(preset.params)),
+    );
+    setHelperRows(
+      startBlank
+        ? textToRows("")
+        : textToRows(helpersToText(preset.helpers)),
+    );
+    setTransitions(
+      startBlank
+        ? withTransitionIds([{ rate: "", deltas: [] }], 0)
+        : withTransitionIds(preset.transitions, preset.vars.length),
+    );
     setTMax(preset.tMax);
     setDt(preset.dt);
     setNumSims(1);
@@ -797,8 +822,9 @@ export default function CTMPInhomoSimulator({
 
           <div className="bg-white border border-slate-300">
             <div className="px-3 py-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="order-1 flex items-center gap-2 mr-1">
+              <div className="flex items-start gap-2">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     onClick={runSimulation}
                     disabled={running}
@@ -808,7 +834,7 @@ export default function CTMPInhomoSimulator({
                   </button>
 
                   <button
-                    onClick={() => loadPreset("seasonal")}
+                    onClick={resetModel}
                     className="w-20 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs"
                   >
                     Reset
@@ -824,7 +850,7 @@ export default function CTMPInhomoSimulator({
                   </button>
                 </div>
 
-                <div className="order-2 flex items-center gap-2 flex-nowrap whitespace-nowrap max-w-full overflow-x-auto">
+                <div className="flex min-w-0 max-w-full items-center gap-2 overflow-x-auto whitespace-nowrap">
                   <label className="text-[11px] text-slate-500">t max</label>
                   <input
                     type="number"
@@ -856,10 +882,28 @@ export default function CTMPInhomoSimulator({
                 </div>
 
                 {stats && (
-                  <span className="order-3 md:order-3 md:ml-auto text-xs text-slate-500 font-mono">
+                  <span className="ml-auto text-xs text-slate-500 font-mono">
                     {stats}
                   </span>
                 )}
+                </div>
+
+                <SaveModelControls
+                  sessionUser={sessionUser}
+                  simulatorType="ctmp-inhomo"
+                  modelName={modelName}
+                  onModelNameChange={setModelName}
+                  savedSimulationId={savedSimulationId}
+                  exportUsername={exportUsername}
+                  exportSlug={initialSavedSimulation?.slug ?? null}
+                  canEditCurrentModel={canEditCurrentModel}
+                  getPayload={buildSavePayload}
+                  getPreviewChart={buildPreviewChart}
+                  onSaved={(savedSimulation) => {
+                    setSavedSimulationId(savedSimulation.id);
+                    setModelName(savedSimulation.name);
+                  }}
+                />
               </div>
 
               <div
@@ -879,22 +923,6 @@ export default function CTMPInhomoSimulator({
               </div>
             </div>
 
-            <SaveModelControls
-              sessionUser={sessionUser}
-              simulatorType="ctmp-inhomo"
-              modelName={modelName}
-              onModelNameChange={setModelName}
-              savedSimulationId={savedSimulationId}
-              exportUsername={exportUsername}
-              exportSlug={initialSavedSimulation?.slug ?? null}
-              canEditCurrentModel={canEditCurrentModel}
-              getPayload={buildSavePayload}
-              getPreviewChart={buildPreviewChart}
-              onSaved={(savedSimulation) => {
-                setSavedSimulationId(savedSimulation.id);
-                setModelName(savedSimulation.name);
-              }}
-            />
           </div>
         </div>
       </div>

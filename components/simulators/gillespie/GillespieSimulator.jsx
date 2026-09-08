@@ -121,6 +121,7 @@ export default function GillespieSimulator({
   initialSavedSimulation = null,
   exportUsername = null,
   canEditCurrentModel = true,
+  startBlank = false,
 }) {
   const initialSavedPayload = useMemo(
     () =>
@@ -132,18 +133,24 @@ export default function GillespieSimulator({
   const [activeTab, setActiveTab] = useState("vars");
   const [varRows, setVarRows] = useState(() =>
     initialSavedPayload?.varRows ??
-    textToRows(assignmentsToText(FOOD_CHAIN_PRESET.vars)),
+    (startBlank
+      ? textToRows("")
+      : textToRows(assignmentsToText(FOOD_CHAIN_PRESET.vars))),
   );
   const [paramRows, setParamRows] = useState(() =>
     initialSavedPayload?.paramRows ??
-    textToRows(assignmentsToText(FOOD_CHAIN_PRESET.params)),
+    (startBlank
+      ? textToRows("")
+      : textToRows(assignmentsToText(FOOD_CHAIN_PRESET.params))),
   );
   const [transitions, setTransitions] = useState(() =>
     initialSavedPayload?.transitions ??
-    withTransitionIds(
-      FOOD_CHAIN_PRESET.transitions,
-      FOOD_CHAIN_PRESET.vars.length,
-    ),
+    (startBlank
+      ? withTransitionIds([{ rate: "", deltas: [] }], 0)
+      : withTransitionIds(
+          FOOD_CHAIN_PRESET.transitions,
+          FOOD_CHAIN_PRESET.vars.length,
+        )),
   );
 
   const [tMax, setTMax] = useState(
@@ -286,14 +293,24 @@ export default function GillespieSimulator({
     downloadCsvText(resultsCsv.csvText, resultsCsv.filename);
   }, []);
 
-  const loadPreset = () => {
-    setVarRows(textToRows(assignmentsToText(FOOD_CHAIN_PRESET.vars)));
-    setParamRows(textToRows(assignmentsToText(FOOD_CHAIN_PRESET.params)));
+  const resetModel = () => {
+    setVarRows(
+      startBlank
+        ? textToRows("")
+        : textToRows(assignmentsToText(FOOD_CHAIN_PRESET.vars)),
+    );
+    setParamRows(
+      startBlank
+        ? textToRows("")
+        : textToRows(assignmentsToText(FOOD_CHAIN_PRESET.params)),
+    );
     setTransitions(
-      withTransitionIds(
-        FOOD_CHAIN_PRESET.transitions,
-        FOOD_CHAIN_PRESET.vars.length,
-      ),
+      startBlank
+        ? withTransitionIds([{ rate: "", deltas: [] }], 0)
+        : withTransitionIds(
+            FOOD_CHAIN_PRESET.transitions,
+            FOOD_CHAIN_PRESET.vars.length,
+          ),
     );
     setTMax(FOOD_CHAIN_PRESET.tMax);
     setNumSims(1);
@@ -765,8 +782,9 @@ export default function GillespieSimulator({
           </div>
 
           <div className="bg-white border border-slate-300">
-            <div className="px-3 py-2 flex flex-wrap items-center gap-2">
-              <div className="order-1 flex items-center gap-2 mr-1">
+            <div className="flex items-start gap-2 px-3 py-2">
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={runSimulation}
                   disabled={running}
@@ -776,7 +794,7 @@ export default function GillespieSimulator({
                 </button>
 
                 <button
-                  onClick={loadPreset}
+                  onClick={resetModel}
                   className="w-20 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs"
                 >
                   Reset
@@ -792,7 +810,7 @@ export default function GillespieSimulator({
                 </button>
               </div>
 
-              <div className="order-2 flex items-center gap-2 flex-nowrap whitespace-nowrap max-w-full overflow-x-auto">
+              <div className="flex min-w-0 max-w-full items-center gap-2 overflow-x-auto whitespace-nowrap">
                 <label className="text-[11px] text-slate-500">t max</label>
                 <input
                   type="number"
@@ -815,28 +833,29 @@ export default function GillespieSimulator({
               </div>
 
               {stats && (
-                <span className="order-3 md:order-3 md:ml-auto text-xs text-slate-500 font-mono">
+                <span className="ml-auto text-xs text-slate-500 font-mono">
                   {stats}
                 </span>
               )}
-            </div>
+              </div>
 
-            <SaveModelControls
-              sessionUser={sessionUser}
-              simulatorType="gillespie"
-              modelName={modelName}
-              onModelNameChange={setModelName}
-              savedSimulationId={savedSimulationId}
-              exportUsername={exportUsername}
-              exportSlug={initialSavedSimulation?.slug ?? null}
-              canEditCurrentModel={canEditCurrentModel}
-              getPayload={buildSavePayload}
-              getPreviewChart={buildPreviewChart}
-              onSaved={(savedSimulation) => {
-                setSavedSimulationId(savedSimulation.id);
-                setModelName(savedSimulation.name);
-              }}
-            />
+              <SaveModelControls
+                sessionUser={sessionUser}
+                simulatorType="gillespie"
+                modelName={modelName}
+                onModelNameChange={setModelName}
+                savedSimulationId={savedSimulationId}
+                exportUsername={exportUsername}
+                exportSlug={initialSavedSimulation?.slug ?? null}
+                canEditCurrentModel={canEditCurrentModel}
+                getPayload={buildSavePayload}
+                getPreviewChart={buildPreviewChart}
+                onSaved={(savedSimulation) => {
+                  setSavedSimulationId(savedSimulation.id);
+                  setModelName(savedSimulation.name);
+                }}
+              />
+            </div>
           </div>
         </div>
       </div>

@@ -90,6 +90,7 @@ The app saves simulator definitions and settings, not raw simulation histories o
 - `/gillespie` exact CTMC simulator
 - `/ctmp-inhomo` time-varying CTMP simulator
 - `/sde` stochastic differential equation simulator
+- `/discrete-time` discrete-time, discrete-space simulator
 - `/login` email login page
 - `/dashboard` saved simulations for the current user
 

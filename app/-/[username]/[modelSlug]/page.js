@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import CTMPInhomoSimulator from "@/components/simulators/ctmp-inhomo/CTMPInhomoSimulator";
+import DiscreteTimeSimulator from "@/components/simulators/discrete-time/DiscreteTimeSimulator";
 import GillespieSimulator from "@/components/simulators/gillespie/GillespieSimulator";
 import SDESimulator from "@/components/simulators/sde/SDESimulator";
 import { buildSessionUser } from "@/lib/auth/session-user";
@@ -65,6 +66,10 @@ export default async function PublicSavedModelPage({ params }) {
 
   if (publicModel.savedSimulation.simulatorType === "sde") {
     return <SDESimulator {...simulatorProps} />;
+  }
+
+  if (publicModel.savedSimulation.simulatorType === "discrete-time") {
+    return <DiscreteTimeSimulator {...simulatorProps} />;
   }
 
   notFound();
