@@ -1,35 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Plus, X } from "lucide-react";
-
-const MODEL_OPTIONS = [
-  {
-    href: "/gillespie?blank=1",
-    title: "CTMC Gillespie",
-    subtitle: "Exact stochastic simulation",
-    description: "Build an event-driven reaction network.",
-  },
-  {
-    href: "/ctmp-inhomo?blank=1",
-    title: "CTMP Time Var",
-    subtitle: "Time-dependent Markov process",
-    description: "Define transitions with time-varying rates.",
-  },
-  {
-    href: "/sde?blank=1",
-    title: "SDE Solver",
-    subtitle: "Euler-Maruyama method",
-    description: "Create a system of drift and diffusion equations.",
-  },
-  {
-    href: "/discrete-time?blank=1",
-    title: "Discrete Time",
-    subtitle: "Generation-by-generation process",
-    description: "Define independent per-individual transition probabilities.",
-  },
-];
+import SimulatorTypeCard, {
+  SIMULATOR_TYPE_CARDS,
+} from "@/components/SimulatorTypeCard";
 
 export default function NewModelModal() {
   const [isOpen, setIsOpen] = useState(false);
@@ -92,30 +67,18 @@ export default function NewModelModal() {
             </button>
           </div>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            {MODEL_OPTIONS.map(({ href, title, subtitle, description }, index) => (
-              <Link
-                key={href}
-                href={href}
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            {SIMULATOR_TYPE_CARDS.map((simulator, index) => (
+              <SimulatorTypeCard
+                key={simulator.path}
+                href={`${simulator.path}?blank=1`}
+                {...simulator}
                 target="_blank"
                 rel="noopener noreferrer"
                 autoFocus={index === 0}
+                compactNote={false}
                 onClick={() => setIsOpen(false)}
-                className="group flex min-h-44 flex-col rounded-xl border border-slate-200 bg-slate-50 p-4 transition hover:border-blue-300 hover:bg-blue-50 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-700"
-              >
-                <span className="text-base font-bold text-slate-900 group-hover:text-blue-950">
-                  {title}
-                </span>
-                <span className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  {subtitle}
-                </span>
-                <span className="mt-3 text-sm leading-relaxed text-slate-600">
-                  {description}
-                </span>
-                <span className="mt-auto pt-4 text-xs font-semibold text-blue-900">
-                  Open blank model ↗
-                </span>
-              </Link>
+              />
             ))}
           </div>
         </div>
