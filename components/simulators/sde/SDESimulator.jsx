@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import SimChart from "../shared/SimChart";
+import ChartStack, { buildExtraGraphPanels } from "../shared/ChartStack";
+import GraphsMenu, { useExtraGraphToggles } from "../shared/GraphsMenu";
+import EditorScrollArea from "../shared/EditorScrollArea";
 import ExpressionListSection from "../shared/ExpressionListSection";
+import VariableColorInput from "../shared/VariableColorInput";
 import SaveModelControls from "../shared/SaveModelControls";
 import {
   buildSimulationResultsCsv,
@@ -11,6 +15,8 @@ import {
 } from "../shared/resultsCsv";
 import {
   SDE_SERIES_COLORS,
+  applySeriesColors,
+  buildVariableSeries,
   getSeriesColor,
   hexToRgba,
 } from "../shared/seriesColors";
@@ -183,6 +189,7 @@ export default function SDESimulator({
   const [stats, setStats] = useState("");
   const [chartDatasets, setChartDatasets] = useState([]);
   const [chartXMax, setChartXMax] = useState(undefined);
+  const [runSnapshot, setRunSnapshot] = useState(null);
   const [savedSimulationId, setSavedSimulationId] = useState(
     initialSavedSimulation?.id ?? null,
   );
@@ -213,13 +220,37 @@ export default function SDESimulator({
     return entries;
   }, [components]);
 
+  const variableSeries = useMemo(
+    () => buildVariableSeries(components, SDE_SERIES_COLORS),
+    [components],
+  );
+  const displayDatasets = useMemo(
+    () => applySeriesColors(chartDatasets, variableSeries),
+    [chartDatasets, variableSeries],
+  );
   const legendItems = useMemo(
     () =>
-      variableLegendPreview.map((entry, index) => ({
+      variableLegendPreview.map((entry) => ({
         label: entry.legendLabel,
-        color: getSeriesColor(SDE_SERIES_COLORS, index),
+        color: variableSeries.get(entry.name)?.color,
       })),
+    [variableLegendPreview, variableSeries],
+  );
+  const sdeVariableNames = useMemo(
+    () => variableLegendPreview.map((entry) => entry.name),
     [variableLegendPreview],
+  );
+  const extraGraphs = useExtraGraphToggles(sdeVariableNames);
+  const extraPanels = useMemo(
+    () =>
+      buildExtraGraphPanels({
+        snapshot: runSnapshot,
+        pairs: extraGraphs.pairs,
+        enabledPairKeys: extraGraphs.enabledPairKeys,
+        meanEnabled: extraGraphs.meanEnabled,
+        variableSeries,
+      }),
+    [extraGraphs, runSnapshot, variableSeries],
   );
 
   const updateRow = (setter) => (id, text, patch) => {
@@ -331,6 +362,7 @@ export default function SDESimulator({
     setStats("");
     setChartDatasets([]);
     setChartXMax(undefined);
+    setRunSnapshot(null);
     clearResultsCsv();
   };
 
@@ -349,6 +381,7 @@ export default function SDESimulator({
     setStats("");
     setChartDatasets([]);
     setChartXMax(undefined);
+    setRunSnapshot(null);
     clearResultsCsv();
   }, [clearResultsCsv]);
 
@@ -372,14 +405,14 @@ export default function SDESimulator({
 
   const buildPreviewChart = useCallback(
     () => ({
-      datasets: chartDatasets,
+      datasets: displayDatasets,
       legendItems,
       xMax: chartXMax,
       xLabel: "Time",
       yLabel: "Value",
       showLegend: true,
     }),
-    [chartDatasets, chartXMax, legendItems],
+    [displayDatasets, chartXMax, legendItems],
   );
 
   const runSimulation = useCallback(() => {
@@ -479,12 +512,15 @@ export default function SDESimulator({
           const times = result.times.filter((_, idx) => idx % step === 0);
           const history = result.history.filter((_, idx) => idx % step === 0);
 
-          varNames.forEach((_, varIdx) => {
+          varNames.forEach((name, varIdx) => {
+            const series = variableSeries.get(name);
             const color = hexToRgba(
-              getSeriesColor(SDE_SERIES_COLORS, varIdx),
+              series?.color,
               alpha,
             );
             datasets.push({
+              variableId: series?.id,
+              seriesAlpha: alpha,
               label: simIdx === 0 ? legendLabels[varIdx] : "",
               data: times.map((time, rowIdx) => ({
                 x: time,
@@ -499,8 +535,19 @@ export default function SDESimulator({
           });
         });
 
+        const nextXMax = allResults[0].times[allResults[0].times.length - 1];
         setChartDatasets(datasets);
-        setChartXMax(allResults[0].times[allResults[0].times.length - 1]);
+        setChartXMax(nextXMax);
+        setRunSnapshot({
+          runs: allResults,
+          variableNames: varNames,
+          legendLabels,
+          xLabel: "Time",
+          yLabel: "Value",
+          xMax: nextXMax,
+          interpolate: "linear",
+          stepped: false,
+        });
         setStats(`${allResults[0].times.length} pts/path`);
       } catch (event) {
         setError(event.message);
@@ -508,13 +555,13 @@ export default function SDESimulator({
         setRunning(false);
       }
     }, 50);
-  }, [components, dt, modelName, numSims, paramsText, tMax]);
+  }, [components, dt, modelName, numSims, paramsText, tMax, variableSeries]);
 
   return (
     <div className="flex flex-col h-auto md:h-[calc(100vh-3.5rem)] bg-slate-300">
       <div className="flex-1 min-h-0 flex flex-col md:flex-row">
-        <aside className="w-full md:w-[520px] bg-slate-100 border-r border-slate-300 overflow-hidden flex flex-col">
-          <div className="grid grid-cols-2 border-b border-slate-300 bg-slate-200">
+        <aside className="flex max-h-[calc(100dvh-3.5rem)] min-h-0 w-full flex-col overflow-hidden border-r border-slate-300 bg-slate-100 md:max-h-none md:w-[520px] md:shrink-0">
+          <div className="grid grid-cols-2 border-b border-slate-400 bg-slate-300">
             {TAB_ITEMS.map((tab) => {
               const isActive = activeTab === tab.id;
               return (
@@ -522,10 +569,10 @@ export default function SDESimulator({
                   key={tab.id}
                   type="button"
                   onClick={() => setActiveTab(tab.id)}
-                  className={`py-2 text-xs font-semibold border-r border-slate-300 last:border-r-0 ${
+                  className={`py-2 text-xs font-semibold border-r border-slate-400 last:border-r-0 ${
                     isActive
-                      ? "bg-white text-slate-900"
-                      : "bg-slate-200 text-slate-500 hover:text-slate-700"
+                      ? "bg-white text-slate-950"
+                      : "bg-slate-300 text-slate-700 hover:bg-slate-200 hover:text-slate-950"
                   }`}
                 >
                   {tab.label}
@@ -534,10 +581,11 @@ export default function SDESimulator({
             })}
           </div>
 
-          <div className="flex-1 overflow-y-auto">
+          <EditorScrollArea>
             {activeTab === "params" && (
               <ExpressionListSection
                 title="Parameters"
+                allowSliders
                 helperText="One line each: Name = Value"
                 rows={paramRows}
                 onUpdateRow={updateRow(setParamRows)}
@@ -548,12 +596,12 @@ export default function SDESimulator({
             )}
 
             {activeTab === "vars" && (
-              <section className="border-b border-slate-300">
-                <div className="px-3 py-2 bg-slate-200 border-b border-slate-300">
-                  <div className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
+              <section className="border-b border-slate-400">
+                <div className="px-3 py-2 bg-slate-200 border-b border-slate-400">
+                  <div className="text-[11px] font-bold uppercase tracking-wide text-slate-800">
                     Variables
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
+                  <p className="text-[11px] text-slate-600 mt-0.5">
                     Each variable has its own Drift and Diffusion expressions.
                   </p>
                 </div>
@@ -561,17 +609,14 @@ export default function SDESimulator({
                 {components.map((component, index) => (
                   <div
                     key={component.id}
-                    className="grid grid-cols-[46px_1fr_36px] border-b border-slate-300 bg-slate-100"
+                    className="grid grid-cols-[46px_1fr_36px] border-b border-slate-400 bg-slate-100"
                   >
                     <div className="relative flex items-start justify-center pt-2 text-xs text-slate-500 border-r border-slate-300">
-                      <span
-                        className="absolute left-1 top-1/2 -translate-y-1/2 h-6 w-[15px] rounded-[2px]"
-                        style={{
-                          backgroundColor: getSeriesColor(
-                            SDE_SERIES_COLORS,
-                            index,
-                          ),
-                        }}
+                      <VariableColorInput
+                        className="w-[15px]"
+                        label={component.name.trim() || `variable ${index + 1}`}
+                        color={getSeriesColor(SDE_SERIES_COLORS, index, component.color)}
+                        onChange={(color) => updateComponent(component.id, "color", color)}
                       />
                       <button
                         type="button"
@@ -752,7 +797,7 @@ export default function SDESimulator({
                 </button>
               </section>
             )}
-          </div>
+          </EditorScrollArea>
 
           {error && (
             <div className="p-3 border-t border-slate-300 space-y-2">
@@ -765,18 +810,7 @@ export default function SDESimulator({
           )}
         </aside>
 
-        <div className="flex-1 min-h-[360px] md:min-h-0 p-2 md:p-3 bg-slate-200 flex flex-col gap-2">
-          <div className="flex-1 min-h-0 border border-slate-300 bg-white">
-            <SimChart
-              datasets={chartDatasets}
-              legendItems={legendItems}
-              xMax={chartXMax}
-              xLabel="Time"
-              yLabel="Value"
-              showTooltips={parseInt(numSims, 10) <= 1}
-            />
-          </div>
-
+        <div className="flex min-h-[360px] min-w-0 flex-1 flex-col gap-2 bg-slate-200 pt-2 pl-2 pr-4 pb-2 md:min-h-0 md:pt-3 md:pl-3 md:pr-5 md:pb-2.5">
           <div className="bg-white border border-slate-300">
             <div className="flex items-start gap-2 px-3 py-2">
               <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
@@ -795,15 +829,6 @@ export default function SDESimulator({
                 >
                   Reset
                 </button>
-
-                <button
-                  type="button"
-                  onClick={handleDownloadResultsCsv}
-                  disabled={!hasResultsCsv}
-                  className="px-3 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 text-xs"
-                >
-                  Download CSV
-                </button>
               </div>
 
               <div className="flex min-w-0 max-w-full items-center gap-2 overflow-x-auto whitespace-nowrap">
@@ -813,7 +838,7 @@ export default function SDESimulator({
                   value={tMax}
                   step="any"
                   onChange={(event) => setTMax(event.target.value)}
-                  className="w-16 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
+                  className="w-16 px-2 py-1 rounded border border-slate-300 bg-white text-xs outline-none ring-0 transition-colors focus:border-slate-400 focus:outline-none focus:ring-0"
                 />
 
                 <label className="text-[11px] text-slate-500">dt</label>
@@ -822,7 +847,7 @@ export default function SDESimulator({
                   value={dt}
                   step="0.001"
                   onChange={(event) => setDt(event.target.value)}
-                  className="w-20 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
+                  className="w-20 px-2 py-1 rounded border border-slate-300 bg-white text-xs outline-none ring-0 transition-colors focus:border-slate-400 focus:outline-none focus:ring-0"
                 />
 
                 <label className="text-[11px] text-slate-500">runs</label>
@@ -833,7 +858,7 @@ export default function SDESimulator({
                   max="200"
                   step="1"
                   onChange={(event) => setNumSims(event.target.value)}
-                  className="w-16 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
+                  className="w-16 px-2 py-1 rounded border border-slate-300 bg-white text-xs outline-none ring-0 transition-colors focus:border-slate-400 focus:outline-none focus:ring-0"
                 />
               </div>
 
@@ -844,6 +869,14 @@ export default function SDESimulator({
               )}
               </div>
 
+              <GraphsMenu
+                pairs={extraGraphs.pairs}
+                enabledPairKeys={extraGraphs.enabledPairKeys}
+                onTogglePair={extraGraphs.togglePair}
+                meanEnabled={extraGraphs.meanEnabled}
+                onToggleMean={extraGraphs.toggleMean}
+                meanXLabel="Time"
+              />
               <SaveModelControls
                 sessionUser={sessionUser}
                 simulatorType="sde"
@@ -855,6 +888,8 @@ export default function SDESimulator({
                 canEditCurrentModel={canEditCurrentModel}
                 getPayload={buildSavePayload}
                 getPreviewChart={buildPreviewChart}
+                onDownloadCsv={handleDownloadResultsCsv}
+                canDownloadCsv={hasResultsCsv}
                 onSaved={(savedSimulation) => {
                   setSavedSimulationId(savedSimulation.id);
                   setModelName(savedSimulation.name);
@@ -862,6 +897,20 @@ export default function SDESimulator({
               />
             </div>
           </div>
+
+          <ChartStack
+            extras={extraPanels}
+            main={
+              <SimChart
+                datasets={displayDatasets}
+                legendItems={legendItems}
+                xMax={chartXMax}
+                xLabel="Time"
+                yLabel="Value"
+                showTooltips={parseInt(numSims, 10) <= 1}
+              />
+            }
+          />
         </div>
       </div>
     </div>

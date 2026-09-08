@@ -5,6 +5,33 @@ body {
   overscroll-behavior: none;
 }
 
+* {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+*::-webkit-scrollbar,
+*::-webkit-scrollbar-button,
+*::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+  background: transparent !important;
+}
+
+.no-scrollbar {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+}
+
 body {
   font-family:
     ui-sans-serif,

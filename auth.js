@@ -80,4 +80,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
   trustHost: process.env.AUTH_TRUST_HOST === "true" ? true : undefined,
+  logger: {
+    error(error) {
+      if (error?.type === "JWTSessionError") return;
+      console.error(error);
+    },
+  },
 });

@@ -88,8 +88,10 @@ export function buildSimulationChartDatasets({
 export function buildSimulationChartOptions({
   renderedDatasets = [],
   xMax,
+  xMin = 0,
   xLabel = "Time",
   yLabel = "Count",
+  yBeginAtZero = true,
   xTickSignificantFigures,
   xTickAutoSkip = true,
   showLegend = true,
@@ -126,7 +128,9 @@ export function buildSimulationChartOptions({
       x: {
         type: "linear",
         title: { display: true, text: xLabel },
-        min: 0,
+        ...(xMin != null && Number.isFinite(Number(xMin))
+          ? { min: Number(xMin) }
+          : {}),
         grid: {
           color: gridColor,
           lineWidth: gridWidth,
@@ -140,7 +144,7 @@ export function buildSimulationChartOptions({
       },
       y: {
         title: { display: true, text: yLabel },
-        beginAtZero: true,
+        beginAtZero: yBeginAtZero,
         grid: {
           color: gridColor,
           lineWidth: gridWidth,

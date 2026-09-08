@@ -5,6 +5,7 @@ import DiscreteTimeSimulator from "@/components/simulators/discrete-time/Discret
 import GillespieSimulator from "@/components/simulators/gillespie/GillespieSimulator";
 import SDESimulator from "@/components/simulators/sde/SDESimulator";
 import { buildSessionUser } from "@/lib/auth/session-user";
+import PublicOwnerRegistrar from "@/components/providers/PublicOwnerRegistrar";
 import { getPublicSavedSimulationByUsernameAndSlug } from "@/lib/saved-simulations/service";
 import {
   normalizeSavedSimulationSlug,
@@ -56,21 +57,24 @@ export default async function PublicSavedModelPage({ params }) {
     exportUsername: publicModel.owner.username,
   };
 
+  let simulator = null;
   if (publicModel.savedSimulation.simulatorType === "gillespie") {
-    return <GillespieSimulator {...simulatorProps} />;
+    simulator = <GillespieSimulator {...simulatorProps} />;
+  } else if (publicModel.savedSimulation.simulatorType === "ctmp-inhomo") {
+    simulator = <CTMPInhomoSimulator {...simulatorProps} />;
+  } else if (publicModel.savedSimulation.simulatorType === "sde") {
+    simulator = <SDESimulator {...simulatorProps} />;
+  } else if (publicModel.savedSimulation.simulatorType === "discrete-time") {
+    simulator = <DiscreteTimeSimulator {...simulatorProps} />;
   }
 
-  if (publicModel.savedSimulation.simulatorType === "ctmp-inhomo") {
-    return <CTMPInhomoSimulator {...simulatorProps} />;
+  if (!simulator) {
+    notFound();
   }
 
-  if (publicModel.savedSimulation.simulatorType === "sde") {
-    return <SDESimulator {...simulatorProps} />;
-  }
-
-  if (publicModel.savedSimulation.simulatorType === "discrete-time") {
-    return <DiscreteTimeSimulator {...simulatorProps} />;
-  }
-
-  notFound();
+  return (
+    <PublicOwnerRegistrar username={publicModel.owner.username}>
+      {simulator}
+    </PublicOwnerRegistrar>
+  );
 }

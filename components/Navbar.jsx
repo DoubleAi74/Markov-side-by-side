@@ -12,7 +12,10 @@ import {
   subscribeProfileUpdated,
 } from "@/lib/community/events";
 import ProfileImageControl from "@/components/community/ProfileImageControl";
-import { useSimulatorTypeLabel } from "@/components/providers/SimulatorTypeProvider";
+import {
+  usePublicOwnerUsername,
+  useSimulatorTypeLabel,
+} from "@/components/providers/SimulatorTypeProvider";
 import {
   ACCOUNT_DELETION_PHRASE,
   matchesDeletionPhrase,
@@ -33,6 +36,7 @@ export default function Navbar({ sessionUser = null }) {
   const pathname = usePathname();
   const router = useRouter();
   const simulatorLabel = useSimulatorTypeLabel();
+  const publicOwnerUsername = usePublicOwnerUsername();
   const [menuOpen, setMenuOpen] = useState(false);
   const [examplesOpen, setExamplesOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -393,6 +397,19 @@ export default function Navbar({ sessionUser = null }) {
         </div>
 
         <div className="hidden md:flex items-center gap-2">
+          {!sessionUser && publicOwnerUsername ? (
+            <Link
+              href={`/-/${encodeURIComponent(publicOwnerUsername)}`}
+              onClick={() => {
+                setExamplesOpen(false);
+                setProfileOpen(false);
+              }}
+              aria-label={`Open @${publicOwnerUsername}'s dashboard`}
+              className="max-w-[10rem] truncate px-3 py-1.5 rounded-md text-sm font-medium text-slate-300 transition whitespace-nowrap hover:bg-slate-700 hover:text-white"
+            >
+              @{publicOwnerUsername}
+            </Link>
+          ) : null}
           <Link
             href={HOME_LINK.href}
             onClick={() => {
@@ -516,6 +533,20 @@ export default function Navbar({ sessionUser = null }) {
         </div>
 
         <div className="md:hidden flex items-center gap-2">
+          {!sessionUser && publicOwnerUsername ? (
+            <Link
+              href={`/-/${encodeURIComponent(publicOwnerUsername)}`}
+              onClick={() => {
+                setMenuOpen(false);
+                setExamplesOpen(false);
+                setProfileOpen(false);
+              }}
+              aria-label={`Open @${publicOwnerUsername}'s dashboard`}
+              className="max-w-[7rem] truncate px-2 py-1.5 rounded-md text-sm font-medium text-slate-300 transition hover:bg-slate-700 hover:text-white"
+            >
+              @{publicOwnerUsername}
+            </Link>
+          ) : null}
           {sessionUser && renderProfileButton()}
           <button
             type="button"
@@ -788,6 +819,19 @@ export default function Navbar({ sessionUser = null }) {
           id="mobile-nav-menu"
           className="md:hidden absolute top-14 left-0 right-0 bg-slate-800 shadow-lg border-t border-slate-700 z-50"
         >
+          {!sessionUser && publicOwnerUsername ? (
+            <Link
+              href={`/-/${encodeURIComponent(publicOwnerUsername)}`}
+              onClick={() => {
+                setMenuOpen(false);
+                setProfileOpen(false);
+              }}
+              className="block border-b border-slate-700 px-4 py-3 text-sm font-medium text-slate-300 transition hover:bg-slate-700 hover:text-white"
+            >
+              @{publicOwnerUsername}
+            </Link>
+          ) : null}
+
           <Link
             href={HOME_LINK.href}
             onClick={() => {

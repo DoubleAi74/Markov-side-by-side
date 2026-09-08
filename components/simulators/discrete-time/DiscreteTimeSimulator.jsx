@@ -9,6 +9,9 @@ import {
   serializeDiscreteTimeState,
 } from "@/lib/saved-simulations/serializers";
 import SaveModelControls from "../shared/SaveModelControls";
+import EditorScrollArea from "../shared/EditorScrollArea";
+import ChartStack, { buildExtraGraphPanels } from "../shared/ChartStack";
+import GraphsMenu, { useExtraGraphToggles } from "../shared/GraphsMenu";
 import { useRegisterSimulatorType } from "@/components/providers/SimulatorTypeProvider";
 import SimChart from "../shared/SimChart";
 import {
@@ -18,7 +21,8 @@ import {
 } from "../shared/resultsCsv";
 import {
   DISCRETE_TIME_SERIES_COLORS,
-  getSeriesColor,
+  applySeriesColors,
+  buildVariableSeries,
   hexToRgba,
 } from "../shared/seriesColors";
 import {
@@ -88,6 +92,7 @@ export default function DiscreteTimeSimulator({
   const [stats, setStats] = useState("");
   const [chartDatasets, setChartDatasets] = useState([]);
   const [chartXMax, setChartXMax] = useState(undefined);
+  const [runSnapshot, setRunSnapshot] = useState(null);
   const [savedSimulationId, setSavedSimulationId] = useState(
     initialSavedSimulation?.id ?? null,
   );
@@ -115,16 +120,48 @@ export default function DiscreteTimeSimulator({
       ];
     });
   }, [components]);
+  const variableSeries = useMemo(
+    () => buildVariableSeries(components, DISCRETE_TIME_SERIES_COLORS),
+    [components],
+  );
+  const displayDatasets = useMemo(
+    () => applySeriesColors(chartDatasets, variableSeries),
+    [chartDatasets, variableSeries],
+  );
   const legendItems = useMemo(
     () =>
-      variableLegendPreview.map((entry, index) => ({
+      variableLegendPreview.map((entry) => ({
         label: entry.legendLabel,
-        color: getSeriesColor(DISCRETE_TIME_SERIES_COLORS, index),
+        color: variableSeries.get(entry.name)?.color,
       })),
+    [variableLegendPreview, variableSeries],
+  );
+  const discreteVariableNames = useMemo(
+    () => variableLegendPreview.map((entry) => entry.name),
     [variableLegendPreview],
+  );
+  const extraGraphs = useExtraGraphToggles(discreteVariableNames);
+  const extraPanels = useMemo(
+    () =>
+      buildExtraGraphPanels({
+        snapshot: runSnapshot,
+        pairs: extraGraphs.pairs,
+        enabledPairKeys: extraGraphs.enabledPairKeys,
+        meanEnabled: extraGraphs.meanEnabled,
+        variableSeries,
+      }),
+    [extraGraphs, runSnapshot, variableSeries],
   );
 
   const updateComponent = (id, component) => {
+    if (components.find((row) => row.id === id)?.mode !== component.mode) {
+      setChartDatasets([]);
+      setChartXMax(undefined);
+      setRunSnapshot(null);
+      setError("");
+      setStats("");
+      clearResultsCsv();
+    }
     setComponents((rows) => rows.map((row) => row.id === id ? component : row));
   };
 
@@ -156,6 +193,7 @@ export default function DiscreteTimeSimulator({
     setStats("");
     setChartDatasets([]);
     setChartXMax(undefined);
+    setRunSnapshot(null);
     clearResultsCsv();
   };
 
@@ -173,6 +211,7 @@ export default function DiscreteTimeSimulator({
       setStats("");
       setChartDatasets([]);
       setChartXMax(undefined);
+      setRunSnapshot(null);
       clearResultsCsv();
     },
     [clearResultsCsv],
@@ -196,7 +235,7 @@ export default function DiscreteTimeSimulator({
 
   const buildPreviewChart = useCallback(
     () => ({
-      datasets: chartDatasets,
+      datasets: displayDatasets,
       legendItems,
       xMax: chartXMax,
       xLabel: "Step",
@@ -204,7 +243,7 @@ export default function DiscreteTimeSimulator({
       xTickAutoSkip: false,
       showLegend: true,
     }),
-    [chartDatasets, chartXMax, legendItems],
+    [displayDatasets, chartXMax, legendItems],
   );
 
   const handleDownloadResultsCsv = useCallback(() => {
@@ -259,15 +298,16 @@ export default function DiscreteTimeSimulator({
         let alpha = 1;
         let lineWidth = 2;
         if (runCount > 1) {
-          alpha = 0.55;
+          alpha = 0.82;
           lineWidth = 1.5;
         }
         if (runCount > 10) {
-          alpha = 0.3;
-          lineWidth = 1;
+          alpha = 0.58;
+          lineWidth = 1.5;
         }
         if (runCount > 50) {
-          alpha = 0.15;
+          alpha = 0.38;
+          lineWidth = 1;
         }
 
         const componentByName = new Map(
@@ -281,12 +321,15 @@ export default function DiscreteTimeSimulator({
         });
         const datasets = [];
         allResults.forEach((result, runIndex) => {
-          variableNames.forEach((_, variableIndex) => {
+          variableNames.forEach((name, variableIndex) => {
+            const series = variableSeries.get(name);
             const color = hexToRgba(
-              getSeriesColor(DISCRETE_TIME_SERIES_COLORS, variableIndex),
+              series?.color,
               alpha,
             );
             datasets.push({
+              variableId: series?.id,
+              seriesAlpha: alpha,
               label: runIndex === 0 ? legendLabels[variableIndex] : "",
               data: result.times.map((generation, rowIndex) => ({
                 x: generation,
@@ -303,6 +346,17 @@ export default function DiscreteTimeSimulator({
 
         setChartDatasets(datasets);
         setChartXMax(generationCount);
+        setRunSnapshot({
+          runs: allResults,
+          variableNames,
+          legendLabels,
+          xLabel: "Step",
+          yLabel: "State",
+          xMax: generationCount,
+          xTickAutoSkip: false,
+          interpolate: "step",
+          stepped: true,
+        });
         setStats(`${generationCount} steps · ${runCount} runs`);
       } catch (runError) {
         setError(runError.message);
@@ -310,19 +364,19 @@ export default function DiscreteTimeSimulator({
         setRunning(false);
       }
     }, 50);
-  }, [components, generations, modelName, numSims]);
+  }, [components, generations, modelName, numSims, variableSeries]);
 
   return (
     <div className="flex h-auto flex-col bg-slate-300 md:h-[calc(100vh-3.5rem)]">
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <aside className="flex w-full flex-col overflow-hidden border-r border-slate-300 bg-slate-100 md:w-[520px]">
-          <div className="flex-1 overflow-y-auto">
-            <section className="border-b border-slate-300">
-              <div className="border-b border-slate-300 bg-slate-200 px-3 py-2.5">
-                <div className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
+        <aside className="flex max-h-[calc(100dvh-3.5rem)] min-h-0 w-full flex-col overflow-hidden border-r border-slate-300 bg-slate-100 md:max-h-none md:w-[520px] md:shrink-0">
+          <EditorScrollArea>
+            <section className="border-b border-slate-400">
+              <div className="border-b border-slate-400 bg-slate-200 px-3 py-2.5">
+                <div className="text-[11px] font-bold uppercase tracking-wide text-slate-800">
                   Discrete-time models
                 </div>
-                <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">
+                <p className="mt-0.5 text-[11px] leading-relaxed text-slate-600">
                   Choose how each variable changes at each step. Variables
                   evolve independently; probabilities must total 1.
                 </p>
@@ -346,7 +400,7 @@ export default function DiscreteTimeSimulator({
                 + Add variable
               </button>
             </section>
-          </div>
+          </EditorScrollArea>
 
           {error && (
             <div className="border-t border-slate-300 p-3">
@@ -357,19 +411,7 @@ export default function DiscreteTimeSimulator({
           )}
         </aside>
 
-        <div className="flex min-h-[360px] min-w-0 flex-1 flex-col gap-2 bg-slate-200 p-2 md:min-h-0 md:p-3">
-          <div className="min-h-0 flex-1 border border-slate-300 bg-white">
-            <SimChart
-              datasets={chartDatasets}
-              legendItems={legendItems}
-              xMax={chartXMax}
-              xLabel="Step"
-              yLabel="State"
-              xTickAutoSkip={false}
-              showTooltips={parseInt(numSims, 10) <= 1}
-            />
-          </div>
-
+        <div className="flex min-h-[360px] min-w-0 flex-1 flex-col gap-2 bg-slate-200 pt-2 pl-2 pr-4 pb-2 md:min-h-0 md:pt-3 md:pl-3 md:pr-5 md:pb-2.5">
           <div className="border border-slate-300 bg-white">
             <div className="flex items-start gap-2 px-3 py-2">
               <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
@@ -389,20 +431,11 @@ export default function DiscreteTimeSimulator({
                   >
                     Reset
                   </button>
-                  <button
-                    type="button"
-                    onClick={handleDownloadResultsCsv}
-                    disabled={!hasResultsCsv}
-                    className="rounded border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Download CSV
-                  </button>
                 </div>
 
-                <div className="flex min-w-0 max-w-full items-center gap-2 overflow-x-auto whitespace-nowrap">
-                  <label className="text-[11px] text-slate-500">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <label className="flex items-center gap-2 text-[11px] text-slate-500">
                     steps
-                  </label>
                   <input
                     type="number"
                     min="1"
@@ -411,9 +444,10 @@ export default function DiscreteTimeSimulator({
                     aria-label="Steps"
                     value={generations}
                     onChange={(event) => setGenerations(event.target.value)}
-                    className="w-20 rounded border border-slate-300 bg-white px-2 py-1 text-xs"
+                    className="w-20 rounded border border-slate-300 bg-white px-2 py-1 text-xs outline-none ring-0 transition-colors focus:border-slate-400 focus:outline-none focus:ring-0"
                   />
-                  <label className="text-[11px] text-slate-500">runs</label>
+                  </label>
+                  <label className="flex items-center gap-2 text-[11px] text-slate-500">runs
                   <input
                     type="number"
                     min="1"
@@ -422,8 +456,9 @@ export default function DiscreteTimeSimulator({
                     aria-label="Runs"
                     value={numSims}
                     onChange={(event) => setNumSims(event.target.value)}
-                    className="w-16 rounded border border-slate-300 bg-white px-2 py-1 text-xs"
+                    className="w-16 rounded border border-slate-300 bg-white px-2 py-1 text-xs outline-none ring-0 transition-colors focus:border-slate-400 focus:outline-none focus:ring-0"
                   />
+                  </label>
                 </div>
 
                 {stats && (
@@ -433,6 +468,14 @@ export default function DiscreteTimeSimulator({
                 )}
               </div>
 
+              <GraphsMenu
+                pairs={extraGraphs.pairs}
+                enabledPairKeys={extraGraphs.enabledPairKeys}
+                onTogglePair={extraGraphs.togglePair}
+                meanEnabled={extraGraphs.meanEnabled}
+                onToggleMean={extraGraphs.toggleMean}
+                meanXLabel="Step"
+              />
               <SaveModelControls
                 sessionUser={sessionUser}
                 simulatorType="discrete-time"
@@ -445,6 +488,8 @@ export default function DiscreteTimeSimulator({
                 getPayload={buildSavePayload}
                 getPreviewChart={buildPreviewChart}
                 supportsNativeExport={false}
+                onDownloadCsv={handleDownloadResultsCsv}
+                canDownloadCsv={hasResultsCsv}
                 onSaved={(savedSimulation) => {
                   setSavedSimulationId(savedSimulation.id);
                   setModelName(savedSimulation.name);
@@ -452,6 +497,21 @@ export default function DiscreteTimeSimulator({
               />
             </div>
           </div>
+
+          <ChartStack
+            extras={extraPanels}
+            main={
+              <SimChart
+                datasets={displayDatasets}
+                legendItems={legendItems}
+                xMax={chartXMax}
+                xLabel="Step"
+                yLabel="State"
+                xTickAutoSkip={false}
+                showTooltips={parseInt(numSims, 10) <= 1}
+              />
+            }
+          />
         </div>
       </div>
     </div>

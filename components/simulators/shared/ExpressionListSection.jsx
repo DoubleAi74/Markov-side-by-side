@@ -2,6 +2,13 @@
 
 import { useRef, useState } from "react";
 import { X } from "lucide-react";
+import NumericSlider from "./NumericSlider";
+import VariableColorInput from "./VariableColorInput";
+import {
+  defaultSliderConfig,
+  parseNumericAssignment,
+  replaceAssignmentValue,
+} from "@/lib/numeric-sliders";
 
 export default function ExpressionListSection({
   title,
@@ -15,6 +22,7 @@ export default function ExpressionListSection({
   minRows = 1,
   showRowColor = false,
   colorForRow = null,
+  allowSliders = false,
 }) {
   const [focusedId, setFocusedId] = useState(null);
   const inputRefs = useRef({});
@@ -33,7 +41,11 @@ export default function ExpressionListSection({
 
   const remove = (id, index) => {
     if (rows.length <= minRows) {
-      onUpdateRow(id, "", { noteEnabled: false, noteLabel: "" });
+      onUpdateRow(id, "", {
+        noteEnabled: false,
+        noteLabel: "",
+        slider: undefined,
+      });
       return;
     }
 
@@ -43,13 +55,13 @@ export default function ExpressionListSection({
   };
 
   return (
-    <section className="border-b border-slate-300">
-      <div className="px-3 py-2 bg-slate-200 border-b border-slate-300">
-        <div className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
+    <section className="border-b border-slate-400">
+      <div className="px-3 py-2 bg-slate-200 border-b border-slate-400">
+        <div className="text-[11px] font-bold uppercase tracking-wide text-slate-800">
           {title}
         </div>
         {helperText && (
-          <p className="text-[11px] text-slate-500 mt-0.5">{helperText}</p>
+          <p className="text-[11px] text-slate-600 mt-0.5">{helperText}</p>
         )}
         {extraHint}
       </div>
@@ -59,6 +71,10 @@ export default function ExpressionListSection({
           const active = focusedId === row.id;
           const rowNoteEnabled = Boolean(row.noteEnabled);
           const rowNoteLabel = row.noteLabel ?? "";
+          const assignment = allowSliders
+            ? parseNumericAssignment(row.text)
+            : null;
+          const sliderEnabled = Boolean(row.slider?.enabled);
 
           const toggleRowLabel = () => {
             onUpdateRow(row.id, row.text, { noteEnabled: !rowNoteEnabled });
@@ -67,19 +83,17 @@ export default function ExpressionListSection({
           return (
             <div
               key={row.id}
-              className={`grid grid-cols-[48px_1fr_36px] items-stretch border-b border-slate-300 ${
+              className={`grid grid-cols-[48px_minmax(0,1fr)_36px] items-stretch border-b border-slate-400 ${
                 active ? "bg-white" : "bg-slate-100"
               }`}
             >
-              <div className="relative border-r border-slate-300">
+              <div className="relative border-r border-slate-400">
                 {showRowColor && (
-                  <span
-                    className="absolute left-1 top-1/2 -translate-y-1/2 h-6 w-[10px] rounded-[4px]"
-                    style={{
-                      backgroundColor: colorForRow
-                        ? colorForRow(index)
-                        : "#64748b",
-                    }}
+                  <VariableColorInput
+                    className="w-[10px]"
+                    label={row.text.split("=")[0].trim() || `variable ${index + 1}`}
+                    color={row.color ?? colorForRow?.(index) ?? "#64748b"}
+                    onChange={(color) => onUpdateRow(row.id, row.text, { color })}
                   />
                 )}
                 <button
@@ -89,8 +103,8 @@ export default function ExpressionListSection({
                   aria-pressed={rowNoteEnabled}
                   className={`absolute right-1 top-1 p-0.5 rounded transition ${
                     rowNoteEnabled
-                      ? "text-slate-600"
-                      : "text-slate-300 hover:text-slate-500"
+                      ? "text-slate-700"
+                      : "text-slate-400 hover:text-slate-600"
                   }`}
                 >
                   <svg
@@ -108,6 +122,55 @@ export default function ExpressionListSection({
                     />
                   </svg>
                 </button>
+                {allowSliders && (
+                  <button
+                    type="button"
+                    aria-label={`Toggle slider for ${assignment?.name ?? `${title} row ${index + 1}`}`}
+                    aria-pressed={sliderEnabled}
+                    title={
+                      !assignment && !sliderEnabled
+                        ? "Enter name = number to use a slider"
+                        : sliderEnabled
+                          ? "Hide slider"
+                          : "Show slider"
+                    }
+                    disabled={!assignment && !sliderEnabled}
+                    onClick={() =>
+                      onUpdateRow(row.id, row.text, {
+                        slider: {
+                          ...(row.slider ??
+                            defaultSliderConfig(assignment?.value ?? 0)),
+                          enabled: !sliderEnabled,
+                        },
+                      })
+                    }
+                    className={`absolute right-1 top-6 rounded p-0.5 transition focus-visible:outline-2 focus-visible:outline-blue-500 disabled:cursor-default disabled:opacity-40 ${sliderEnabled ? "bg-blue-100 text-blue-700" : "text-slate-400 hover:text-slate-600"}`}
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      className="size-4"
+                      aria-hidden="true"
+                    >
+                      <path strokeLinecap="round" d="M3 7h18M3 17h18" />
+                      <circle
+                        cx={sliderEnabled ? 16 : 8}
+                        cy="7"
+                        r="3"
+                        fill={sliderEnabled ? "#dbeafe" : "#f1f5f9"}
+                      />
+                      <circle
+                        cx={sliderEnabled ? 8 : 16}
+                        cy="17"
+                        r="3"
+                        fill={sliderEnabled ? "#dbeafe" : "#f1f5f9"}
+                      />
+                    </svg>
+                  </button>
+                )}
               </div>
 
               <div
@@ -153,9 +216,16 @@ export default function ExpressionListSection({
                   }}
                   type="text"
                   value={row.text}
+                  aria-label={`${title} row ${index + 1}`}
                   placeholder={index === 0 ? placeholder : ""}
                   spellCheck={false}
-                  onFocus={() => setFocusedId(row.id)}
+                  onFocus={(event) => {
+                    setFocusedId(row.id);
+                    event.target.scrollIntoView({
+                      block: "center",
+                      inline: "nearest",
+                    });
+                  }}
                   onBlur={() =>
                     setFocusedId((current) =>
                       current === row.id ? null : current,
@@ -174,14 +244,30 @@ export default function ExpressionListSection({
                       remove(row.id, index);
                     }
                   }}
-                  className="w-full px-1 py-1.5   text-[15px] text-slate-900 outline-none focus:outline-none placeholder:text-slate-400"
+                  className="w-full px-1 py-1.5   text-[15px] text-slate-950 outline-none focus:outline-none placeholder:text-slate-500"
                 />
+                {allowSliders && sliderEnabled && (
+                  <NumericSlider
+                    label={assignment?.name ?? `${title} row ${index + 1}`}
+                    value={assignment?.value}
+                    config={row.slider}
+                    onConfigChange={(slider) =>
+                      onUpdateRow(row.id, row.text, { slider })
+                    }
+                    onChange={(value) =>
+                      onUpdateRow(
+                        row.id,
+                        replaceAssignmentValue(row.text, value),
+                      )
+                    }
+                  />
+                )}
               </div>
 
               <button
                 type="button"
                 onClick={() => remove(row.id, index)}
-                className="text-slate-400 hover:text-red-500 text-sm border-l border-slate-300 justify-center items-center flex "
+                className="text-slate-500 hover:text-red-500 text-sm border-l border-slate-400 justify-center items-center flex "
                 aria-label="Delete row"
               >
                 <X className="h-4 w-4" />

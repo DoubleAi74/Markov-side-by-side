@@ -9,13 +9,16 @@ import {
 export default function SimChart({
   datasets = [],
   xMax,
+  xMin = 0,
   xLabel = "Time",
   yLabel = "Count",
+  yBeginAtZero = true,
   xTickSignificantFigures,
   xTickAutoSkip = true,
   legendItems = [],
   showTooltips = true,
   showLegend = true,
+  minHeightClass = "min-h-[280px] md:min-h-[400px]",
 }) {
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
@@ -67,8 +70,10 @@ export default function SimChart({
     const nextConfig = buildSimulationChartConfig({
       datasets,
       xMax,
+      xMin,
       xLabel,
       yLabel,
+      yBeginAtZero,
       xTickSignificantFigures,
       xTickAutoSkip,
       legendItems,
@@ -82,8 +87,10 @@ export default function SimChart({
   }, [
     datasets,
     xMax,
+    xMin,
     xLabel,
     yLabel,
+    yBeginAtZero,
     xTickSignificantFigures,
     xTickAutoSkip,
     legendItems,
@@ -93,7 +100,7 @@ export default function SimChart({
   ]);
 
   return (
-    <div className="relative w-full h-full min-h-[280px] md:min-h-[400px]">
+    <div className={`relative w-full h-full ${minHeightClass}`}>
       <canvas ref={canvasRef} />
     </div>
   );

@@ -309,9 +309,29 @@ A finite-state chain can instead use:
 }
 ```
 
-`useSlider` records the editor preference. With two outcomes (or two matrix columns), enabling it links the first probability `p` to the second probability `1 - p`. Exact numeric inputs remain available. More than two outcomes use independent numeric probability inputs.
+`useSlider` records the editor preference. With two outcomes (or two matrix columns), enabling it links the first probability `p` to the second probability `1 - p`. Exact numeric inputs remain available. With more than two outcomes or states, optional sliders adjust each probability independently. Totals remain visible and must equal 1.
 
 Variables evolve independently. Increment probabilities are constant; finite-state dependence is specified through matrix rows. The browser and save API share validation in `lib/discrete-time/model.js`. The UI calls generations “steps” for all three modes, while the saved setting remains `generations` for compatibility. JSON exports retain the active mode and its definition. Native runner export remains unavailable for discrete-time models.
+
+
+### Parameter sliders
+
+Gillespie, time-varying CTMP and SDE parameter rows can include optional slider preferences:
+
+```json
+{
+  "text": "k = 0.05",
+  "noteEnabled": false,
+  "noteLabel": "",
+  "slider": { "enabled": true, "min": 0, "max": 0.1, "step": 0.001 }
+}
+```
+
+The text remains the model definition. Moving the slider updates only the numeric value in `name = number`; typing an exact value remains available. Each slider has editable bounds and step size, with automatic defaults based on the current value. Slider preferences persist through saving and reopening but do not change exported mathematical parameters. Older rows without a `slider` field retain the original numeric text editor. Sliders are limited to parameters and probabilities; initial values, expressions and run settings keep their existing controls.
+
+### Variable colours
+
+Click a variable's colour swatch to open the native colour picker. The selected colour updates its plotted paths, legend and transition markers without rerunning the simulation. An optional `color` field (six-digit hex, such as `"#2563eb"`) is saved on each variable text row or component across all four model types. Existing models without this field use their default palette. Colours are presentation metadata and do not change exported mathematical models.
 
 ## What Is Not Saved In The Main Model Format
 

@@ -1,3 +1,5 @@
+import { normalizeHexColor } from "../../../lib/colors.js";
+
 export const CTMP_INHOMO_SERIES_COLORS = [
   "#4f46e5",
   "#db2777",
@@ -34,19 +36,9 @@ export const DISCRETE_TIME_SERIES_COLORS = [
   "#65a30d",
 ];
 
-function normalizeHex(hex) {
-  if (typeof hex !== "string") return null;
-  const value = hex.trim();
-  if (!value.startsWith("#")) return null;
-
-  if (/^#[0-9A-Fa-f]{6}$/.test(value)) return value;
-  if (/^#[0-9A-Fa-f]{3}$/.test(value)) {
-    return `#${value[1]}${value[1]}${value[2]}${value[2]}${value[3]}${value[3]}`;
-  }
-  return null;
-}
-
-export function getSeriesColor(palette, index) {
+export function getSeriesColor(palette, index, customColor) {
+  const color = normalizeHexColor(customColor);
+  if (color) return color;
   if (!Array.isArray(palette) || palette.length === 0) {
     return "#334155";
   }
@@ -55,7 +47,7 @@ export function getSeriesColor(palette, index) {
 }
 
 export function hexToRgba(hex, alpha) {
-  const normalized = normalizeHex(hex);
+  const normalized = normalizeHexColor(hex);
   const opacity = Number.isFinite(alpha) ? Math.min(Math.max(alpha, 0), 1) : 1;
   if (!normalized) return `rgba(51, 65, 85, ${opacity})`;
 
@@ -63,4 +55,30 @@ export function hexToRgba(hex, alpha) {
   const g = parseInt(normalized.slice(3, 5), 16);
   const b = parseInt(normalized.slice(5, 7), 16);
   return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+}
+
+// Keep each colour attached to its source row, including across blank rows.
+export function buildVariableSeries(rows, palette) {
+  const series = new Map();
+  rows.forEach((row, index) => {
+    const name = String(row.name ?? row.text?.split("=")[0] ?? "").trim();
+    if (!name || series.has(name)) return;
+    series.set(name, {
+      id: row.id,
+      color: getSeriesColor(palette, index, row.color),
+    });
+  });
+  return series;
+}
+
+export function applySeriesColors(datasets, series) {
+  const colorsById = new Map(
+    [...series.values()].map(({ id, color }) => [id, color]),
+  );
+  return datasets.map((dataset) => {
+    const hex = colorsById.get(dataset.variableId);
+    if (!hex) return dataset;
+    const color = hexToRgba(hex, dataset.seriesAlpha);
+    return { ...dataset, borderColor: color, backgroundColor: color };
+  });
 }

@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import SimChart from "../shared/SimChart";
+import ChartStack, { buildExtraGraphPanels } from "../shared/ChartStack";
+import GraphsMenu, { useExtraGraphToggles } from "../shared/GraphsMenu";
+import EditorScrollArea from "../shared/EditorScrollArea";
 import ExpressionListSection from "../shared/ExpressionListSection";
 import SaveModelControls from "../shared/SaveModelControls";
 import {
@@ -11,6 +14,8 @@ import {
 } from "../shared/resultsCsv";
 import {
   GILLESPIE_SERIES_COLORS,
+  applySeriesColors,
+  buildVariableSeries,
   getSeriesColor,
   hexToRgba,
 } from "../shared/seriesColors";
@@ -166,6 +171,7 @@ export default function GillespieSimulator({
   const [stats, setStats] = useState("");
   const [chartDatasets, setChartDatasets] = useState([]);
   const [chartXMax, setChartXMax] = useState(undefined);
+  const [runSnapshot, setRunSnapshot] = useState(null);
   const [savedSimulationId, setSavedSimulationId] = useState(
     initialSavedSimulation?.id ?? null,
   );
@@ -186,15 +192,35 @@ export default function GillespieSimulator({
     }
   }, [varsText]);
 
+  const variableSeries = useMemo(
+    () => buildVariableSeries(varRows, GILLESPIE_SERIES_COLORS),
+    [varRows],
+  );
+  const displayDatasets = useMemo(
+    () => applySeriesColors(chartDatasets, variableSeries),
+    [chartDatasets, variableSeries],
+  );
   const legendItems = useMemo(
     () =>
       buildLegendLabelsFromRows(variableNamesPreview, varRows).map(
         (label, index) => ({
           label,
-          color: getSeriesColor(GILLESPIE_SERIES_COLORS, index),
+          color: variableSeries.get(variableNamesPreview[index])?.color,
         }),
       ),
-    [varRows, variableNamesPreview],
+    [varRows, variableNamesPreview, variableSeries],
+  );
+  const extraGraphs = useExtraGraphToggles(variableNamesPreview);
+  const extraPanels = useMemo(
+    () =>
+      buildExtraGraphPanels({
+        snapshot: runSnapshot,
+        pairs: extraGraphs.pairs,
+        enabledPairKeys: extraGraphs.enabledPairKeys,
+        meanEnabled: extraGraphs.meanEnabled,
+        variableSeries,
+      }),
+    [extraGraphs, runSnapshot, variableSeries],
   );
 
   const updateRow = (setter) => (id, text, patch) => {
@@ -320,6 +346,7 @@ export default function GillespieSimulator({
     setStats("");
     setChartDatasets([]);
     setChartXMax(undefined);
+    setRunSnapshot(null);
     clearResultsCsv();
   };
 
@@ -338,6 +365,7 @@ export default function GillespieSimulator({
     setStats("");
     setChartDatasets([]);
     setChartXMax(undefined);
+    setRunSnapshot(null);
     clearResultsCsv();
   }, [clearResultsCsv]);
 
@@ -361,7 +389,7 @@ export default function GillespieSimulator({
 
   const buildPreviewChart = useCallback(
     () => ({
-      datasets: chartDatasets,
+      datasets: displayDatasets,
       legendItems,
       xMax: chartXMax,
       xLabel: "Time",
@@ -370,7 +398,7 @@ export default function GillespieSimulator({
       xTickAutoSkip: false,
       showLegend: true,
     }),
-    [chartDatasets, chartXMax, legendItems],
+    [displayDatasets, chartXMax, legendItems],
   );
 
   const runSimulation = useCallback(() => {
@@ -483,12 +511,15 @@ export default function GillespieSimulator({
           const times = result.times.filter((_, idx) => idx % step === 0);
           const history = result.history.filter((_, idx) => idx % step === 0);
 
-          varNames.forEach((_, idx) => {
+          varNames.forEach((name, idx) => {
+            const series = variableSeries.get(name);
             const color = hexToRgba(
-              getSeriesColor(GILLESPIE_SERIES_COLORS, idx),
+              series?.color,
               alpha,
             );
             datasets.push({
+              variableId: series?.id,
+              seriesAlpha: alpha,
               label: simIdx === 0 ? varLegendLabels[idx] : "",
               data: times.map((time, rowIdx) => ({
                 x: time,
@@ -511,11 +542,23 @@ export default function GillespieSimulator({
               (result) => result.times[result.times.length - 1],
             ),
           );
-          setChartXMax(
+          const nextXMax =
             Number.isFinite(requestedTMax) && requestedTMax > 0
               ? requestedTMax
-              : observedMaxTime,
-          );
+              : observedMaxTime;
+          setChartXMax(nextXMax);
+          setRunSnapshot({
+            runs: allResults,
+            variableNames: varNames,
+            legendLabels: varLegendLabels,
+            xLabel: "Time",
+            yLabel: "Count",
+            xMax: nextXMax,
+            xTickSignificantFigures: 3,
+            xTickAutoSkip: false,
+            interpolate: "step",
+            stepped: true,
+          });
         }
 
         const avgEvents = Math.round(
@@ -529,13 +572,13 @@ export default function GillespieSimulator({
         setRunning(false);
       }
     }, 50);
-  }, [modelName, numSims, paramsText, tMax, transitions, varRows, varsText]);
+  }, [modelName, numSims, paramsText, tMax, transitions, varRows, varsText, variableSeries]);
 
   return (
     <div className="flex flex-col h-auto md:h-[calc(100vh-3.5rem)] bg-slate-300">
       <div className="flex-1 min-h-0 flex flex-col md:flex-row">
-        <aside className="w-full md:w-[470px] bg-slate-100 border-r border-slate-300 overflow-hidden flex flex-col">
-          <div className="grid grid-cols-3 border-b border-slate-300 bg-slate-200">
+        <aside className="flex max-h-[calc(100dvh-3.5rem)] min-h-0 w-full flex-col overflow-hidden border-r border-slate-300 bg-slate-100 md:max-h-none md:w-[470px] md:shrink-0">
+          <div className="grid grid-cols-3 border-b border-slate-400 bg-slate-300">
             {TAB_ITEMS.map((tab) => {
               const isActive = activeTab === tab.id;
               return (
@@ -543,10 +586,10 @@ export default function GillespieSimulator({
                   key={tab.id}
                   type="button"
                   onClick={() => setActiveTab(tab.id)}
-                  className={`py-2 text-xs font-semibold border-r border-slate-300 last:border-r-0 ${
+                  className={`py-2 text-xs font-semibold border-r border-slate-400 last:border-r-0 ${
                     isActive
-                      ? "bg-white text-slate-900"
-                      : "bg-slate-200 text-slate-500 hover:text-slate-700"
+                      ? "bg-white text-slate-950"
+                      : "bg-slate-300 text-slate-700 hover:bg-slate-200 hover:text-slate-950"
                   }`}
                 >
                   {tab.label}
@@ -555,7 +598,7 @@ export default function GillespieSimulator({
             })}
           </div>
 
-          <div className="flex-1 overflow-y-auto">
+          <EditorScrollArea>
             {activeTab === "vars" && (
               <ExpressionListSection
                 title="Variables"
@@ -575,6 +618,7 @@ export default function GillespieSimulator({
             {activeTab === "params" && (
               <ExpressionListSection
                 title="Parameters"
+                allowSliders
                 helperText="One line each: name = value"
                 rows={paramRows}
                 onUpdateRow={updateRow(setParamRows)}
@@ -585,16 +629,16 @@ export default function GillespieSimulator({
             )}
 
             {activeTab === "transitions" && (
-              <section className="border-b border-slate-300">
-                <div className="px-3 py-2 bg-slate-200 border-b border-slate-300">
-                  <div className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
+              <section className="border-b border-slate-400">
+                <div className="px-3 py-2 bg-slate-200 border-b border-slate-400">
+                  <div className="text-[11px] font-bold uppercase tracking-wide text-slate-800">
                     Transitions
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
+                  <p className="text-[11px] text-slate-600 mt-0.5">
                     Define the rate and update rule for each transition.
                   </p>
                   {variableNamesPreview.length > 0 && (
-                    <p className="text-[11px] text-slate-600 mt-1">
+                    <p className="text-[11px] text-slate-700 mt-1">
                       Order: {variableNamesPreview.join(", ")}
                     </p>
                   )}
@@ -603,9 +647,9 @@ export default function GillespieSimulator({
                 {transitions.map((transition) => (
                   <div
                     key={transition.id}
-                    className="grid grid-cols-[46px_1fr_36px] border-b border-slate-300 bg-slate-100"
+                    className="grid grid-cols-[46px_1fr_36px] border-b border-slate-400 bg-slate-100"
                   >
-                    <div className="flex items-start justify-center pt-2 text-xs text-slate-500 border-r border-slate-300">
+                    <div className="flex items-start justify-center pt-2 text-xs text-slate-500 border-r border-slate-400">
                       <button
                         type="button"
                         onClick={() => toggleTransitionNote(transition.id)}
@@ -723,10 +767,7 @@ export default function GillespieSimulator({
                                 <div
                                   className="mt-0 h-1 rounded-b-sm"
                                   style={{
-                                    backgroundColor: getSeriesColor(
-                                      GILLESPIE_SERIES_COLORS,
-                                      varIdx,
-                                    ),
+                                    backgroundColor: variableSeries.get(varName)?.color,
                                   }}
                                 />
                               </div>
@@ -756,7 +797,7 @@ export default function GillespieSimulator({
                 </button>
               </section>
             )}
-          </div>
+          </EditorScrollArea>
 
           {error && (
             <div className="p-3 border-t border-slate-300 space-y-2">
@@ -769,20 +810,7 @@ export default function GillespieSimulator({
           )}
         </aside>
 
-        <div className="flex-1 min-h-[360px] md:min-h-0 p-2 md:p-3 bg-slate-200 flex flex-col gap-2">
-          <div className="flex-1 min-h-0 border border-slate-300 bg-white">
-            <SimChart
-              datasets={chartDatasets}
-              legendItems={legendItems}
-              xMax={chartXMax}
-              xLabel="Time"
-              yLabel="Count"
-              xTickSignificantFigures={3}
-              xTickAutoSkip={false}
-              showTooltips={parseInt(numSims, 10) <= 1}
-            />
-          </div>
-
+        <div className="flex min-h-[360px] min-w-0 flex-1 flex-col gap-2 bg-slate-200 pt-2 pl-2 pr-4 pb-2 md:min-h-0 md:pt-3 md:pl-3 md:pr-5 md:pb-2.5">
           <div className="bg-white border border-slate-300">
             <div className="flex items-start gap-2 px-3 py-2">
               <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
@@ -801,15 +829,6 @@ export default function GillespieSimulator({
                 >
                   Reset
                 </button>
-
-                <button
-                  type="button"
-                  onClick={handleDownloadResultsCsv}
-                  disabled={!hasResultsCsv}
-                  className="px-3 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 text-xs"
-                >
-                  Download CSV
-                </button>
               </div>
 
               <div className="flex min-w-0 max-w-full items-center gap-2 overflow-x-auto whitespace-nowrap">
@@ -819,7 +838,7 @@ export default function GillespieSimulator({
                   value={tMax}
                   step="any"
                   onChange={(event) => setTMax(event.target.value)}
-                  className="w-20 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
+                  className="w-20 px-2 py-1 rounded border border-slate-300 bg-white text-xs outline-none ring-0 transition-colors focus:border-slate-400 focus:outline-none focus:ring-0"
                 />
 
                 <label className="text-[11px] text-slate-500">runs</label>
@@ -830,7 +849,7 @@ export default function GillespieSimulator({
                   max="200"
                   step="1"
                   onChange={(event) => setNumSims(event.target.value)}
-                  className="w-16 px-2 py-1 rounded border border-slate-300 text-xs bg-white"
+                  className="w-16 px-2 py-1 rounded border border-slate-300 bg-white text-xs outline-none ring-0 transition-colors focus:border-slate-400 focus:outline-none focus:ring-0"
                 />
               </div>
 
@@ -841,6 +860,14 @@ export default function GillespieSimulator({
               )}
               </div>
 
+              <GraphsMenu
+                pairs={extraGraphs.pairs}
+                enabledPairKeys={extraGraphs.enabledPairKeys}
+                onTogglePair={extraGraphs.togglePair}
+                meanEnabled={extraGraphs.meanEnabled}
+                onToggleMean={extraGraphs.toggleMean}
+                meanXLabel="Time"
+              />
               <SaveModelControls
                 sessionUser={sessionUser}
                 simulatorType="gillespie"
@@ -852,6 +879,8 @@ export default function GillespieSimulator({
                 canEditCurrentModel={canEditCurrentModel}
                 getPayload={buildSavePayload}
                 getPreviewChart={buildPreviewChart}
+                onDownloadCsv={handleDownloadResultsCsv}
+                canDownloadCsv={hasResultsCsv}
                 onSaved={(savedSimulation) => {
                   setSavedSimulationId(savedSimulation.id);
                   setModelName(savedSimulation.name);
@@ -859,6 +888,22 @@ export default function GillespieSimulator({
               />
             </div>
           </div>
+
+          <ChartStack
+            extras={extraPanels}
+            main={
+              <SimChart
+                datasets={displayDatasets}
+                legendItems={legendItems}
+                xMax={chartXMax}
+                xLabel="Time"
+                yLabel="Count"
+                xTickSignificantFigures={3}
+                xTickAutoSkip={false}
+                showTooltips={parseInt(numSims, 10) <= 1}
+              />
+            }
+          />
         </div>
       </div>
     </div>

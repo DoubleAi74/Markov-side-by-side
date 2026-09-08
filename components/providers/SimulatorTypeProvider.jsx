@@ -12,13 +12,21 @@ export const SIMULATOR_NAV_LABELS = {
 const SimulatorTypeContext = createContext({
   simulatorType: null,
   setSimulatorType: () => {},
+  ownerUsername: null,
+  setOwnerUsername: () => {},
 });
 
 export function SimulatorTypeProvider({ children }) {
   const [simulatorType, setSimulatorType] = useState(null);
+  const [ownerUsername, setOwnerUsername] = useState(null);
   const value = useMemo(
-    () => ({ simulatorType, setSimulatorType }),
-    [simulatorType],
+    () => ({
+      simulatorType,
+      setSimulatorType,
+      ownerUsername,
+      setOwnerUsername,
+    }),
+    [ownerUsername, simulatorType],
   );
 
   return (
@@ -41,4 +49,18 @@ export function useRegisterSimulatorType(type) {
     setSimulatorType(type);
     return () => setSimulatorType(null);
   }, [type, setSimulatorType]);
+}
+
+export function usePublicOwnerUsername() {
+  return useContext(SimulatorTypeContext).ownerUsername;
+}
+
+export function useRegisterPublicOwner(username) {
+  const { setOwnerUsername } = useContext(SimulatorTypeContext);
+
+  useEffect(() => {
+    const next = typeof username === "string" && username.trim() ? username.trim() : null;
+    setOwnerUsername(next);
+    return () => setOwnerUsername(null);
+  }, [username, setOwnerUsername]);
 }
