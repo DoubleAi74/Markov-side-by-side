@@ -15,8 +15,10 @@ import {
   ValidationError,
 } from "../lib/saved-simulations/validators.js";
 import {
+  applyPathOpacity,
   applySeriesColors,
   buildVariableSeries,
+  clampPathOpacity,
   getSeriesColor,
 } from "../components/simulators/shared/seriesColors.js";
 import { createModelExportConfig } from "../lib/exports/config.js";
@@ -75,6 +77,37 @@ test("existing plots follow variable identity after renaming and deleting rows, 
     { id: "x", text: "X = 1", color: "#123456" },
   ], []));
   assert.equal(recolored[0].backgroundColor, "rgba(18, 52, 86, 0.3)");
+});
+
+test("plot colour override follows the path-opacity slider without copying point data", () => {
+  const data = [{ x: 0, y: 1 }];
+  const datasets = [
+    { variableId: "x", seriesAlpha: 0.3, data, borderColor: "old" },
+  ];
+  const series = buildVariableSeries(
+    [{ id: "x", name: "X", color: "#123456" }],
+    [],
+  );
+  const result = applySeriesColors(datasets, series, 0.5);
+  assert.equal(result[0].borderColor, "rgba(18, 52, 86, 0.5)");
+  assert.equal(result[0].data, data);
+});
+
+test("path-opacity helper tints only run-path strokes", () => {
+  assert.equal(clampPathOpacity(-1), 0.08);
+  assert.equal(clampPathOpacity(2), 1);
+  const mean = { pathStroke: false, seriesAlpha: 1, borderColor: "keep" };
+  const path = {
+    pathStroke: true,
+    seriesHex: "#2563eb",
+    seriesAlpha: 0.2,
+    borderColor: "old",
+    backgroundColor: "old",
+  };
+  const tinted = applyPathOpacity([mean, path], 0.4);
+  assert.equal(tinted[0], mean);
+  assert.equal(tinted[1].seriesAlpha, 0.4);
+  assert.equal(tinted[1].borderColor, "rgba(37, 99, 235, 0.4)");
 });
 
 test("default palette colours match swatches even when the editor contains blank rows", () => {

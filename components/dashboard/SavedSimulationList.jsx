@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Trash2, X, Activity } from "lucide-react";
 import { SAVED_SIMULATION_PREVIEW_UPDATED_EVENT } from "@/lib/previews/events";
 import {
@@ -38,10 +38,40 @@ function buildModelHref(item, profileUsername) {
   return `${ROUTE_BY_SIMULATOR[item.simulatorType]}?model=${item.id}`;
 }
 
+// Measures the title at the base text-sm size via a hidden clone, so the
+// smaller font never feeds back into the measurement. The title box keeps a
+// stable width because the simulator label next to it is shrink-0.
+function useMultilineTitle(name) {
+  const measureRef = useRef(null);
+  const [isMultiline, setIsMultiline] = useState(false);
+
+  useEffect(() => {
+    const el = measureRef.current;
+    if (!el || typeof ResizeObserver === "undefined") {
+      return undefined;
+    }
+
+    const update = () => {
+      const style = window.getComputedStyle(el);
+      const lineHeight =
+        parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.25;
+      setIsMultiline(el.getBoundingClientRect().height > lineHeight * 1.5);
+    };
+
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [name]);
+
+  return { measureRef, isMultiline };
+}
+
 function SimulationCard({ item, profileUsername, allowDelete, onDelete, deletingId }) {
   const [deletePrime, setDeletePrime] = useState(false);
   const isDeleting = deletingId === item.id;
   const preview = item.preview ?? null;
+  const { measureRef, isMultiline } = useMultilineTitle(item.name);
 
   return (
     <div
@@ -81,14 +111,25 @@ function SimulationCard({ item, profileUsername, allowDelete, onDelete, deleting
           </div>
         )}
 
-        <div className="flex pl-1 pr-1 items-center justify-between gap-1 h-8 w-full overflow-hidden">
-          <h2
-            className="min-w-0 flex-1 font-bold text-black/90 group-hover:text-black text-sm leading-snug line-clamp-2 break-words"
-            title={item.name}
-          >
-            {item.name}
-          </h2>
-          <span className="shrink-0 text-xs text-neutral-500 text-right leading-snug">
+        <div className="flex min-h-10 w-full items-start justify-between gap-2 px-1 py-1.5">
+          <div className="relative min-w-0 flex-1">
+            <span
+              ref={measureRef}
+              aria-hidden="true"
+              className="invisible absolute inset-x-0 top-0 text-sm font-bold leading-tight break-words"
+            >
+              {item.name}
+            </span>
+            <h2
+              className={`font-bold leading-tight text-black/90 line-clamp-2 break-words group-hover:text-black ${
+                isMultiline ? "text-xs" : "text-sm"
+              }`}
+              title={item.name}
+            >
+              {item.name}
+            </h2>
+          </div>
+          <span className="mt-px max-w-[42%] shrink-0 text-right text-[11px] leading-tight text-neutral-500">
             {formatSimulatorLabel(item.simulatorType)}
           </span>
         </div>

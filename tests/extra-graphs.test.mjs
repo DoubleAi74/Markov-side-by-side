@@ -50,6 +50,16 @@ test("pair datasets plot one trajectory per run in x-y space", () => {
     { x: 3, y: 30 },
     { x: 4, y: 40 },
   ]);
+  assert.equal(datasets[0].pathStroke, true);
+  assert.equal(
+    buildPairDatasets({
+      runs: [{ times: [0], history: [[1, 2]] }],
+      xIndex: 0,
+      yIndex: 1,
+      color: "#2563eb",
+    })[0].pathStroke,
+    false,
+  );
 });
 
 test("mean datasets average aligned runs and need at least two runs", () => {

@@ -8,6 +8,7 @@ import {
   hydrateDiscreteTimePayload,
   serializeDiscreteTimeState,
 } from "@/lib/saved-simulations/serializers";
+import PathOpacitySlider from "../shared/PathOpacitySlider";
 import SaveModelControls from "../shared/SaveModelControls";
 import EditorScrollArea from "../shared/EditorScrollArea";
 import ChartStack, { buildExtraGraphPanels } from "../shared/ChartStack";
@@ -20,6 +21,7 @@ import {
   downloadCsvText,
 } from "../shared/resultsCsv";
 import {
+  DEFAULT_PATH_OPACITY,
   DISCRETE_TIME_SERIES_COLORS,
   applySeriesColors,
   buildVariableSeries,
@@ -87,9 +89,9 @@ export default function DiscreteTimeSimulator({
   const [numSims, setNumSims] = useState(
     initialSavedPayload?.settings?.numSims ?? GALTON_WATSON_PRESET.numSims,
   );
+  const [pathOpacity, setPathOpacity] = useState(DEFAULT_PATH_OPACITY);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
-  const [stats, setStats] = useState("");
   const [chartDatasets, setChartDatasets] = useState([]);
   const [chartXMax, setChartXMax] = useState(undefined);
   const [runSnapshot, setRunSnapshot] = useState(null);
@@ -124,9 +126,15 @@ export default function DiscreteTimeSimulator({
     () => buildVariableSeries(components, DISCRETE_TIME_SERIES_COLORS),
     [components],
   );
+  const runCount = runSnapshot?.runs?.length ?? 0;
   const displayDatasets = useMemo(
-    () => applySeriesColors(chartDatasets, variableSeries),
-    [chartDatasets, variableSeries],
+    () =>
+      applySeriesColors(
+        chartDatasets,
+        variableSeries,
+        runCount > 1 ? pathOpacity : undefined,
+      ),
+    [chartDatasets, pathOpacity, runCount, variableSeries],
   );
   const legendItems = useMemo(
     () =>
@@ -159,7 +167,6 @@ export default function DiscreteTimeSimulator({
       setChartXMax(undefined);
       setRunSnapshot(null);
       setError("");
-      setStats("");
       clearResultsCsv();
     }
     setComponents((rows) => rows.map((row) => row.id === id ? component : row));
@@ -190,7 +197,6 @@ export default function DiscreteTimeSimulator({
     setGenerations(GALTON_WATSON_PRESET.generations);
     setNumSims(GALTON_WATSON_PRESET.numSims);
     setError("");
-    setStats("");
     setChartDatasets([]);
     setChartXMax(undefined);
     setRunSnapshot(null);
@@ -208,7 +214,6 @@ export default function DiscreteTimeSimulator({
       setSavedSimulationId(savedSimulation.id ?? null);
       setModelName(savedSimulation.name ?? "");
       setError("");
-      setStats("");
       setChartDatasets([]);
       setChartXMax(undefined);
       setRunSnapshot(null);
@@ -295,18 +300,12 @@ export default function DiscreteTimeSimulator({
         };
         setHasResultsCsv(true);
 
-        let alpha = 1;
+        const alpha = runCount > 1 ? pathOpacity : 1;
         let lineWidth = 2;
         if (runCount > 1) {
-          alpha = 0.82;
-          lineWidth = 1.5;
-        }
-        if (runCount > 10) {
-          alpha = 0.58;
           lineWidth = 1.5;
         }
         if (runCount > 50) {
-          alpha = 0.38;
           lineWidth = 1;
         }
 
@@ -357,14 +356,13 @@ export default function DiscreteTimeSimulator({
           interpolate: "step",
           stepped: true,
         });
-        setStats(`${generationCount} steps · ${runCount} runs`);
       } catch (runError) {
         setError(runError.message);
       } finally {
         setRunning(false);
       }
     }, 50);
-  }, [components, generations, modelName, numSims, variableSeries]);
+  }, [components, generations, modelName, numSims, pathOpacity, variableSeries]);
 
   return (
     <div className="flex h-auto flex-col bg-slate-300 md:h-[calc(100vh-3.5rem)]">
@@ -413,9 +411,9 @@ export default function DiscreteTimeSimulator({
 
         <div className="flex min-h-[360px] min-w-0 flex-1 flex-col gap-2 bg-slate-200 pt-2 pl-2 pr-4 pb-2 md:min-h-0 md:pt-3 md:pl-3 md:pr-5 md:pb-2.5">
           <div className="border border-slate-300 bg-white">
-            <div className="flex items-start gap-2 px-3 py-2">
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-nowrap items-center gap-2 px-3 py-2">
+              <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-2">
+                <div className="flex shrink-0 items-center gap-2">
                   <button
                     type="button"
                     onClick={runSimulation}
@@ -433,8 +431,8 @@ export default function DiscreteTimeSimulator({
                   </button>
                 </div>
 
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  <label className="flex items-center gap-2 text-[11px] text-slate-500">
+                <div className="flex min-w-0 items-center gap-2 whitespace-nowrap">
+                  <label className="flex shrink-0 items-center gap-2 text-[11px] text-slate-500">
                     steps
                   <input
                     type="number"
@@ -447,7 +445,9 @@ export default function DiscreteTimeSimulator({
                     className="w-20 rounded border border-slate-300 bg-white px-2 py-1 text-xs outline-none ring-0 transition-colors focus:border-slate-400 focus:outline-none focus:ring-0"
                   />
                   </label>
-                  <label className="flex items-center gap-2 text-[11px] text-slate-500">runs
+                  <span className="flex shrink-0 items-center gap-2 text-[11px] text-slate-500">
+                    runs
+                    <span className="flex items-center gap-0.5">
                   <input
                     type="number"
                     min="1"
@@ -458,14 +458,12 @@ export default function DiscreteTimeSimulator({
                     onChange={(event) => setNumSims(event.target.value)}
                     className="w-16 rounded border border-slate-300 bg-white px-2 py-1 text-xs outline-none ring-0 transition-colors focus:border-slate-400 focus:outline-none focus:ring-0"
                   />
-                  </label>
-                </div>
-
-                {stats && (
-                  <span className="ml-auto font-mono text-xs text-slate-500">
-                    {stats}
+                    {Number(numSims) > 1 && (
+                      <PathOpacitySlider value={pathOpacity} onChange={setPathOpacity} />
+                    )}
+                    </span>
                   </span>
-                )}
+                </div>
               </div>
 
               <GraphsMenu
@@ -500,6 +498,7 @@ export default function DiscreteTimeSimulator({
 
           <ChartStack
             extras={extraPanels}
+            pathOpacity={runCount > 1 ? pathOpacity : 1}
             main={
               <SimChart
                 datasets={displayDatasets}

@@ -46,6 +46,16 @@ export function getSeriesColor(palette, index, customColor) {
   return palette[normalized];
 }
 
+export const DEFAULT_PATH_OPACITY = 0.78;
+export const MIN_PATH_OPACITY = 0.08;
+export const MAX_PATH_OPACITY = 1;
+
+export function clampPathOpacity(value) {
+  const opacity = Number(value);
+  if (!Number.isFinite(opacity)) return DEFAULT_PATH_OPACITY;
+  return Math.min(MAX_PATH_OPACITY, Math.max(MIN_PATH_OPACITY, opacity));
+}
+
 export function hexToRgba(hex, alpha) {
   const normalized = normalizeHexColor(hex);
   const opacity = Number.isFinite(alpha) ? Math.min(Math.max(alpha, 0), 1) : 1;
@@ -71,14 +81,35 @@ export function buildVariableSeries(rows, palette) {
   return series;
 }
 
-export function applySeriesColors(datasets, series) {
+export function applySeriesColors(datasets, series, alphaOverride) {
   const colorsById = new Map(
     [...series.values()].map(({ id, color }) => [id, color]),
   );
+  const hasOverride = Number.isFinite(Number(alphaOverride));
   return datasets.map((dataset) => {
     const hex = colorsById.get(dataset.variableId);
     if (!hex) return dataset;
-    const color = hexToRgba(hex, dataset.seriesAlpha);
+    const color = hexToRgba(
+      hex,
+      hasOverride ? Number(alphaOverride) : dataset.seriesAlpha,
+    );
     return { ...dataset, borderColor: color, backgroundColor: color };
+  });
+}
+
+export function applyPathOpacity(datasets, opacity) {
+  if (!Array.isArray(datasets)) return datasets;
+  const alpha = clampPathOpacity(opacity);
+  return datasets.map((dataset) => {
+    if (!dataset?.pathStroke) return dataset;
+    const hex = dataset.seriesHex;
+    if (!hex) return { ...dataset, seriesAlpha: alpha };
+    const color = hexToRgba(hex, alpha);
+    return {
+      ...dataset,
+      seriesAlpha: alpha,
+      borderColor: color,
+      backgroundColor: color,
+    };
   });
 }

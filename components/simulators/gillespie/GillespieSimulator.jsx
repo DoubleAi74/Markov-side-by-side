@@ -6,6 +6,7 @@ import ChartStack, { buildExtraGraphPanels } from "../shared/ChartStack";
 import GraphsMenu, { useExtraGraphToggles } from "../shared/GraphsMenu";
 import EditorScrollArea from "../shared/EditorScrollArea";
 import ExpressionListSection from "../shared/ExpressionListSection";
+import PathOpacitySlider from "../shared/PathOpacitySlider";
 import SaveModelControls from "../shared/SaveModelControls";
 import {
   buildSimulationResultsCsv,
@@ -13,6 +14,7 @@ import {
   downloadCsvText,
 } from "../shared/resultsCsv";
 import {
+  DEFAULT_PATH_OPACITY,
   GILLESPIE_SERIES_COLORS,
   applySeriesColors,
   buildVariableSeries,
@@ -166,9 +168,9 @@ export default function GillespieSimulator({
   const [numSims, setNumSims] = useState(
     initialSavedPayload?.settings?.numSims ?? 1,
   );
+  const [pathOpacity, setPathOpacity] = useState(DEFAULT_PATH_OPACITY);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
-  const [stats, setStats] = useState("");
   const [chartDatasets, setChartDatasets] = useState([]);
   const [chartXMax, setChartXMax] = useState(undefined);
   const [runSnapshot, setRunSnapshot] = useState(null);
@@ -196,9 +198,15 @@ export default function GillespieSimulator({
     () => buildVariableSeries(varRows, GILLESPIE_SERIES_COLORS),
     [varRows],
   );
+  const runCount = runSnapshot?.runs?.length ?? 0;
   const displayDatasets = useMemo(
-    () => applySeriesColors(chartDatasets, variableSeries),
-    [chartDatasets, variableSeries],
+    () =>
+      applySeriesColors(
+        chartDatasets,
+        variableSeries,
+        runCount > 1 ? pathOpacity : undefined,
+      ),
+    [chartDatasets, pathOpacity, runCount, variableSeries],
   );
   const legendItems = useMemo(
     () =>
@@ -343,7 +351,6 @@ export default function GillespieSimulator({
     setTMax(FOOD_CHAIN_PRESET.tMax);
     setNumSims(1);
     setError("");
-    setStats("");
     setChartDatasets([]);
     setChartXMax(undefined);
     setRunSnapshot(null);
@@ -362,7 +369,6 @@ export default function GillespieSimulator({
     setSavedSimulationId(savedSimulation.id);
     setModelName(savedSimulation.name ?? "");
     setError("");
-    setStats("");
     setChartDatasets([]);
     setChartXMax(undefined);
     setRunSnapshot(null);
@@ -483,18 +489,12 @@ export default function GillespieSimulator({
         };
         setHasResultsCsv(true);
 
-        let alpha = 1.0;
+        const alpha = n > 1 ? pathOpacity : 1;
         let lineWidth = 2;
         if (n > 1) {
-          alpha = 0.6;
           lineWidth = 1.5;
         }
         if (n > 10) {
-          alpha = 0.3;
-          lineWidth = 1;
-        }
-        if (n > 50) {
-          alpha = 0.15;
           lineWidth = 1;
         }
 
@@ -560,19 +560,13 @@ export default function GillespieSimulator({
             stepped: true,
           });
         }
-
-        const avgEvents = Math.round(
-          allResults.reduce((sum, result) => sum + result.times.length - 1, 0) /
-            n,
-        );
-        setStats(`${avgEvents} events avg`);
       } catch (event) {
         setError(event.message);
       } finally {
         setRunning(false);
       }
     }, 50);
-  }, [modelName, numSims, paramsText, tMax, transitions, varRows, varsText, variableSeries]);
+  }, [modelName, numSims, paramsText, pathOpacity, tMax, transitions, varRows, varsText, variableSeries]);
 
   return (
     <div className="flex flex-col h-auto md:h-[calc(100vh-3.5rem)] bg-slate-300">
@@ -812,9 +806,9 @@ export default function GillespieSimulator({
 
         <div className="flex min-h-[360px] min-w-0 flex-1 flex-col gap-2 bg-slate-200 pt-2 pl-2 pr-4 pb-2 md:min-h-0 md:pt-3 md:pl-3 md:pr-5 md:pb-2.5">
           <div className="bg-white border border-slate-300">
-            <div className="flex items-start gap-2 px-3 py-2">
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-              <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-nowrap items-center gap-2 px-3 py-2">
+              <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-2">
+              <div className="flex shrink-0 items-center gap-2">
                 <button
                   onClick={runSimulation}
                   disabled={running}
@@ -831,17 +825,18 @@ export default function GillespieSimulator({
                 </button>
               </div>
 
-              <div className="flex min-w-0 max-w-full items-center gap-2 overflow-x-auto whitespace-nowrap">
-                <label className="text-[11px] text-slate-500">t max</label>
+              <div className="flex min-w-0 items-center gap-2 whitespace-nowrap">
+                <label className="shrink-0 text-[11px] text-slate-500">t max</label>
                 <input
                   type="number"
                   value={tMax}
                   step="any"
                   onChange={(event) => setTMax(event.target.value)}
-                  className="w-20 px-2 py-1 rounded border border-slate-300 bg-white text-xs outline-none ring-0 transition-colors focus:border-slate-400 focus:outline-none focus:ring-0"
+                  className="w-20 shrink-0 px-2 py-1 rounded border border-slate-300 bg-white text-xs outline-none ring-0 transition-colors focus:border-slate-400 focus:outline-none focus:ring-0"
                 />
 
-                <label className="text-[11px] text-slate-500">runs</label>
+                <label className="shrink-0 text-[11px] text-slate-500">runs</label>
+                <div className="flex shrink-0 items-center gap-0.5">
                 <input
                   type="number"
                   value={numSims}
@@ -849,15 +844,13 @@ export default function GillespieSimulator({
                   max="200"
                   step="1"
                   onChange={(event) => setNumSims(event.target.value)}
-                  className="w-16 px-2 py-1 rounded border border-slate-300 bg-white text-xs outline-none ring-0 transition-colors focus:border-slate-400 focus:outline-none focus:ring-0"
+                  className="w-16 shrink-0 px-2 py-1 rounded border border-slate-300 bg-white text-xs outline-none ring-0 transition-colors focus:border-slate-400 focus:outline-none focus:ring-0"
                 />
+                {Number(numSims) > 1 && (
+                  <PathOpacitySlider value={pathOpacity} onChange={setPathOpacity} />
+                )}
+                </div>
               </div>
-
-              {stats && (
-                <span className="ml-auto text-xs text-slate-500 font-mono">
-                  {stats}
-                </span>
-              )}
               </div>
 
               <GraphsMenu
@@ -891,6 +884,7 @@ export default function GillespieSimulator({
 
           <ChartStack
             extras={extraPanels}
+            pathOpacity={runCount > 1 ? pathOpacity : 1}
             main={
               <SimChart
                 datasets={displayDatasets}

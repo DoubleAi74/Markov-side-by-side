@@ -59,6 +59,49 @@ body {
   font-family: "Courier New", Courier, monospace;
 }
 
+.path-opacity-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 4.25rem;
+  height: 2px;
+  margin: 0;
+  cursor: pointer;
+  border-radius: 999px;
+  background: #cbd5e1;
+}
+
+.path-opacity-slider::-webkit-slider-runnable-track {
+  height: 2px;
+  border-radius: 999px;
+  background: #cbd5e1;
+}
+
+.path-opacity-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 10px;
+  height: 10px;
+  margin-top: -4px;
+  border: 0;
+  border-radius: 999px;
+  background: #475569;
+}
+
+.path-opacity-slider::-moz-range-track {
+  height: 2px;
+  border: 0;
+  border-radius: 999px;
+  background: #cbd5e1;
+}
+
+.path-opacity-slider::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border: 0;
+  border-radius: 999px;
+  background: #475569;
+}
+
 .loader {
   border: 3px solid #f3f3f3;
   border-top: 3px solid currentColor;

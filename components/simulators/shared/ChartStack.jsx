@@ -1,7 +1,7 @@
 "use client";
 
 import SimChart from "./SimChart";
-import { hexToRgba } from "./seriesColors";
+import { applyPathOpacity, hexToRgba } from "./seriesColors";
 import {
   MEAN_GRAPH_KEY,
   buildMeanDatasets,
@@ -49,19 +49,23 @@ export function buildExtraGraphPanels({
             yIndex,
             color: colorForName(variableSeries, pair.yName),
             stepped: Boolean(snapshot.stepped),
-          }).map((dataset) => ({
-            ...dataset,
-            borderColor: colorForName(
-              variableSeries,
-              pair.yName,
-              dataset.seriesAlpha,
-            ),
-            backgroundColor: colorForName(
-              variableSeries,
-              pair.yName,
-              dataset.seriesAlpha,
-            ),
-          }))
+          }).map((dataset) => {
+            const seriesHex = variableSeries?.get(pair.yName)?.color;
+            return {
+              ...dataset,
+              seriesHex,
+              borderColor: colorForName(
+                variableSeries,
+                pair.yName,
+                dataset.seriesAlpha,
+              ),
+              backgroundColor: colorForName(
+                variableSeries,
+                pair.yName,
+                dataset.seriesAlpha,
+              ),
+            };
+          })
         : [],
       xLabel: pair.xName,
       yLabel: pair.yName,
@@ -106,8 +110,15 @@ export function buildExtraGraphPanels({
   return panels;
 }
 
-export default function ChartStack({ main, extras = [] }) {
+export default function ChartStack({ main, extras = [], pathOpacity }) {
   const hasExtras = extras.length > 0;
+  const panels =
+    pathOpacity == null
+      ? extras
+      : extras.map((panel) => ({
+          ...panel,
+          datasets: applyPathOpacity(panel.datasets, pathOpacity),
+        }));
 
   return (
     <div className="no-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
@@ -121,7 +132,7 @@ export default function ChartStack({ main, extras = [] }) {
         {main}
       </div>
 
-      {extras.map((panel) => (
+      {panels.map((panel) => (
         <div
           key={panel.key}
           className="flex h-[min(32rem,70vh)] min-h-[280px] shrink-0 flex-col border border-slate-300 bg-white"
