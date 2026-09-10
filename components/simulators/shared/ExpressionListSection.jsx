@@ -83,11 +83,11 @@ export default function ExpressionListSection({
           return (
             <div
               key={row.id}
-              className={`grid grid-cols-[48px_minmax(0,1fr)_36px] items-stretch border-b border-slate-400 ${
+              className={`expression-row grid grid-cols-[48px_minmax(0,1fr)_36px] items-stretch border-b border-slate-400 ${
                 active ? "bg-white" : "bg-slate-100"
               }`}
             >
-              <div className="relative border-r border-slate-400">
+              <div className="expression-row-tools relative border-r border-slate-400">
                 {showRowColor && (
                   <VariableColorInput
                     className="w-[10px]"
@@ -121,6 +121,7 @@ export default function ExpressionListSection({
                       d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"
                     />
                   </svg>
+                  <span className="simulator-touch-label">Label</span>
                 </button>
                 {allowSliders && (
                   <button
@@ -169,17 +170,18 @@ export default function ExpressionListSection({
                         fill={sliderEnabled ? "#dbeafe" : "#f1f5f9"}
                       />
                     </svg>
+                    <span className="simulator-touch-label">Slider</span>
                   </button>
                 )}
               </div>
 
               <div
-                className={`relative w-full px-2.5 py-1.5 overflow-hidden flex flex-col ${
+                className={`expression-row-input relative w-full px-2.5 py-1.5 overflow-hidden flex flex-col ${
                   active ? "bg-white" : "bg-slate-50"
                 }`}
               >
                 {rowNoteEnabled && (
-                  <div className="absolute right-2 top-1 z-10 flex justify-end pointer-events-auto">
+                  <div className="expression-row-note absolute right-2 top-1 z-10 flex justify-end pointer-events-auto">
                     <input
                       type="text"
                       value={rowNoteLabel}
@@ -218,11 +220,13 @@ export default function ExpressionListSection({
                   value={row.text}
                   aria-label={`${title} row ${index + 1}`}
                   placeholder={index === 0 ? placeholder : ""}
+                  autoCapitalize="none"
+                  autoCorrect="off"
                   spellCheck={false}
                   onFocus={(event) => {
                     setFocusedId(row.id);
                     event.target.scrollIntoView({
-                      block: "center",
+                      block: "nearest",
                       inline: "nearest",
                     });
                   }}
@@ -267,7 +271,7 @@ export default function ExpressionListSection({
               <button
                 type="button"
                 onClick={() => remove(row.id, index)}
-                className="text-slate-500 hover:text-red-500 text-sm border-l border-slate-400 justify-center items-center flex "
+                className="expression-row-delete text-slate-500 hover:text-red-500 text-sm border-l border-slate-400 justify-center items-center flex "
                 aria-label="Delete row"
               >
                 <X className="h-4 w-4" />
@@ -279,7 +283,7 @@ export default function ExpressionListSection({
         <button
           type="button"
           onClick={() => insertAfter(rows[rows.length - 1]?.id)}
-          className="w-full text-left px-4 py-2 text-sm text-slate-500 hover:text-slate-700 hover:bg-slate-200 transition"
+          className="simulator-add-row w-full text-left px-4 py-2 text-sm text-slate-500 hover:text-slate-700 hover:bg-slate-200 transition"
         >
           + Add row
         </button>

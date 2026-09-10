@@ -56,7 +56,7 @@ export default function NumericSlider({
         setEditingLimit(field);
         limitInputRefs.current[field]?.focus();
       }}
-      className={`size-6 shrink-0 truncate rounded-none text-center font-mono text-[11px] leading-6 hover:bg-blue-100 focus-visible:outline-1 focus-visible:outline-slate-400 ${editingLimit === field ? "bg-blue-100 text-blue-800" : "text-slate-500 hover:text-blue-800"}`}
+      className={`numeric-slider-limit size-6 shrink-0 truncate rounded-none text-center font-mono text-[11px] leading-6 hover:bg-blue-100 focus-visible:outline-1 focus-visible:outline-slate-400 ${editingLimit === field ? "bg-blue-100 text-blue-800" : "text-slate-500 hover:text-blue-800"}`}
     >
       {String(settings[field]).trim() || (field === "min" ? "min" : "max")}
     </button>
@@ -64,7 +64,7 @@ export default function NumericSlider({
 
   return (
     <div
-      className="min-w-0 rounded border border-blue-100 bg-blue-50/60 px-1.5 py-0.5 text-left"
+      className="numeric-slider min-w-0 rounded border border-blue-100 bg-blue-50/60 px-1.5 py-0.5 text-left"
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget))
           setEditingLimit(null);
@@ -108,7 +108,7 @@ export default function NumericSlider({
       {editingLimit && (
         <div
           id={editorId}
-          className="grid grid-cols-[repeat(3,minmax(0,1fr))_20px] items-end gap-1 border-t border-blue-100 py-1"
+          className="numeric-slider-settings grid grid-cols-[repeat(3,minmax(0,1fr))_20px] items-end gap-1 border-t border-blue-100 py-1"
         >
           {[
             ["min", "Min"],

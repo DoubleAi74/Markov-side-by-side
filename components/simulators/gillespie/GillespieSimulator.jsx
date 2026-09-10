@@ -6,7 +6,8 @@ import ChartStack, { buildExtraGraphPanels } from "../shared/ChartStack";
 import GraphsMenu, { useExtraGraphToggles } from "../shared/GraphsMenu";
 import EditorScrollArea from "../shared/EditorScrollArea";
 import ExpressionListSection from "../shared/ExpressionListSection";
-import PathOpacitySlider from "../shared/PathOpacitySlider";
+import SimulationSettings from "../shared/SimulationSettings";
+import SimulatorWorkspace from "../shared/SimulatorWorkspace";
 import SaveModelControls from "../shared/SaveModelControls";
 import {
   buildSimulationResultsCsv,
@@ -568,11 +569,34 @@ export default function GillespieSimulator({
     }, 50);
   }, [modelName, numSims, paramsText, pathOpacity, tMax, transitions, varRows, varsText, variableSeries]);
 
+  const settings = (
+    <SimulationSettings
+      duration={tMax}
+      onDurationChange={setTMax}
+      runs={numSims}
+      onRunsChange={setNumSims}
+      pathOpacity={pathOpacity}
+      onPathOpacityChange={setPathOpacity}
+    />
+  );
+
   return (
-    <div className="flex flex-col h-auto md:h-[calc(100vh-3.5rem)] bg-slate-300">
-      <div className="flex-1 min-h-0 flex flex-col md:flex-row">
-        <aside className="flex max-h-[calc(100dvh-3.5rem)] min-h-0 w-full flex-col overflow-hidden border-r border-slate-300 bg-slate-100 md:max-h-none md:w-[470px] md:shrink-0">
-          <div className="grid grid-cols-3 border-b border-slate-400 bg-slate-300">
+    <SimulatorWorkspace
+      running={running}
+      onRun={runSimulation}
+      onReset={resetModel}
+      settings={settings}
+      summary={`${numSims} ${Number(numSims) === 1 ? "run" : "runs"} · ${tMax} time`}
+      error={error}
+      hasResults={Boolean(runSnapshot?.runs?.length)}
+    >
+      <div className="simulator-body">
+        <aside
+          className="simulator-editor"
+          aria-label="Model editor"
+          style={{ "--editor-width": "470px" }}
+        >
+          <div className="simulator-editor-tabs grid grid-cols-3 border-b border-slate-400 bg-slate-300">
             {TAB_ITEMS.map((tab) => {
               const isActive = activeTab === tab.id;
               return (
@@ -580,6 +604,7 @@ export default function GillespieSimulator({
                   key={tab.id}
                   type="button"
                   onClick={() => setActiveTab(tab.id)}
+                  aria-pressed={isActive}
                   className={`py-2 text-xs font-semibold border-r border-slate-400 last:border-r-0 ${
                     isActive
                       ? "bg-white text-slate-950"
@@ -641,7 +666,7 @@ export default function GillespieSimulator({
                 {transitions.map((transition) => (
                   <div
                     key={transition.id}
-                    className="grid grid-cols-[46px_1fr_36px] border-b border-slate-400 bg-slate-100"
+                    className="simulator-model-row grid grid-cols-[46px_minmax(0,1fr)_36px] border-b border-slate-400 bg-slate-100"
                   >
                     <div className="flex items-start justify-center pt-2 text-xs text-slate-500 border-r border-slate-400">
                       <button
@@ -689,6 +714,8 @@ export default function GillespieSimulator({
                               )
                             }
                             spellCheck={false}
+                            autoCapitalize="none"
+                            autoCorrect="off"
                             className="
                               max-w-full
                               px-1 py-0
@@ -713,6 +740,7 @@ export default function GillespieSimulator({
                         <input
                           type="text"
                           value={transition.rate}
+                          aria-label="Transition rate"
                           onChange={(event) =>
                             updateTransition(
                               transition.id,
@@ -721,15 +749,17 @@ export default function GillespieSimulator({
                             )
                           }
                           spellCheck={false}
+                          autoCapitalize="none"
+                          autoCorrect="off"
                           className="w-full pl-2.5 pr-14 py-1.5 border border-slate-300 rounded text-sm bg-white"
                           placeholder="h_eat * Plants * Herbivores"
                         />
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] uppercase tracking-wide text-emerald-900/60 font-semibold pointer-events-none">
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] uppercase tracking-wide text-emerald-800 font-semibold pointer-events-none">
                           Rate
                         </span>
                       </div>
 
-                      <div className="relative w-full flex items-center justify-end gap-3">
+                      <div className="simulator-transition-changes relative w-full flex items-center justify-end gap-3">
                         <label className="shrink-0 text-[10px] leading-none tracking-wide text-slate-500 font-semibold">
                           CHANGES:
                         </label>
@@ -738,12 +768,13 @@ export default function GillespieSimulator({
                             Add variables to define changes
                           </div>
                         ) : (
-                          <div className="flex items-center gap-2 flex-nowrap overflow-x-auto pb-0.5">
+                          <div className="simulator-deltas flex items-center gap-2 flex-nowrap overflow-x-auto pb-0.5">
                             {variableNamesPreview.map((varName, varIdx) => (
                               <div
                                 key={`${transition.id}-${varName}`}
                                 className="w-[56px] shrink-0"
                               >
+                                <span className="simulator-delta-name" title={varName}>{varName}</span>
                                 <input
                                   type="text"
                                   value={transition.deltas[varIdx] ?? "0"}
@@ -755,6 +786,7 @@ export default function GillespieSimulator({
                                     )
                                   }
                                   title={varName}
+                                  aria-label={`${varName} change`}
                                   className="w-full px-1 py-1 border border-slate-300 rounded-t text-xs font-semibold text-center bg-white code-input focus:outline-none focus:ring-0 focus:border-slate-300 placeholder:text-slate-200"
                                   placeholder="0"
                                 />
@@ -785,74 +817,41 @@ export default function GillespieSimulator({
                 <button
                   type="button"
                   onClick={addTransition}
-                  className="w-full text-left px-4 py-2 text-sm text-slate-500 hover:text-slate-700 hover:bg-slate-200 transition"
+                  className="simulator-add-row w-full text-left px-4 py-2 text-sm text-slate-500 hover:text-slate-700 hover:bg-slate-200 transition"
                 >
                   + Add transition
                 </button>
               </section>
             )}
           </EditorScrollArea>
-
-          {error && (
-            <div className="p-3 border-t border-slate-300 space-y-2">
-              {error && (
-                <div className="text-xs text-red-700 bg-red-100 border border-red-200 px-2 py-1.5 rounded whitespace-pre-wrap">
-                  {error}
-                </div>
-              )}
-            </div>
-          )}
         </aside>
 
-        <div className="flex min-h-[360px] min-w-0 flex-1 flex-col gap-2 bg-slate-200 pt-2 pl-2 pr-4 pb-2 md:min-h-0 md:pt-3 md:pl-3 md:pr-5 md:pb-2.5">
-          <div className="bg-white border border-slate-300">
-            <div className="flex flex-nowrap items-center gap-2 px-3 py-2">
-              <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-2">
-              <div className="flex shrink-0 items-center gap-2">
-                <button
-                  onClick={runSimulation}
-                  disabled={running}
-                  className="w-24 py-1.5 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-xs font-semibold text-white text-center"
-                >
-                  {running ? "Running..." : "Run"}
-                </button>
-
-                <button
-                  onClick={resetModel}
-                  className="w-20 py-1.5 rounded border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs"
-                >
-                  Reset
-                </button>
-              </div>
-
-              <div className="flex min-w-0 items-center gap-2 whitespace-nowrap">
-                <label className="shrink-0 text-[11px] text-slate-500">t max</label>
-                <input
-                  type="number"
-                  value={tMax}
-                  step="any"
-                  onChange={(event) => setTMax(event.target.value)}
-                  className="w-20 shrink-0 px-2 py-1 rounded border border-slate-300 bg-white text-xs outline-none ring-0 transition-colors focus:border-slate-400 focus:outline-none focus:ring-0"
-                />
-
-                <label className="shrink-0 text-[11px] text-slate-500">runs</label>
-                <div className="flex shrink-0 items-center gap-0.5">
-                <input
-                  type="number"
-                  value={numSims}
-                  min="1"
-                  max="200"
-                  step="1"
-                  onChange={(event) => setNumSims(event.target.value)}
-                  className="w-16 shrink-0 px-2 py-1 rounded border border-slate-300 bg-white text-xs outline-none ring-0 transition-colors focus:border-slate-400 focus:outline-none focus:ring-0"
-                />
-                {Number(numSims) > 1 && (
-                  <PathOpacitySlider value={pathOpacity} onChange={setPathOpacity} />
-                )}
-                </div>
-              </div>
-              </div>
-
+        <div
+          className="simulator-results"
+          role="region"
+          aria-label="Simulation results"
+        >
+          <div className="simulator-toolbar">
+            <div className="simulator-desktop-controls">
+              <button
+                type="button"
+                onClick={runSimulation}
+                disabled={running}
+                className="simulator-run-button"
+              >
+                {running ? "Running…" : "Run"}
+              </button>
+              <button
+                type="button"
+                onClick={resetModel}
+                disabled={running}
+                className="simulator-reset-button"
+              >
+                Reset
+              </button>
+              {settings}
+            </div>
+            <div className="simulator-tools">
               <GraphsMenu
                 pairs={extraGraphs.pairs}
                 enabledPairKeys={extraGraphs.enabledPairKeys}
@@ -900,6 +899,6 @@ export default function GillespieSimulator({
           />
         </div>
       </div>
-    </div>
+    </SimulatorWorkspace>
   );
 }

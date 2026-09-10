@@ -121,9 +121,9 @@ export default function ChartStack({ main, extras = [], pathOpacity }) {
         }));
 
   return (
-    <div className="no-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+    <div className="simulator-chart-stack no-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto" role="region" aria-label="Simulation charts">
       <div
-        className={`border border-slate-300 bg-white ${
+        className={`simulator-main-chart border border-slate-300 bg-white ${
           hasExtras
             ? "h-full min-h-full shrink-0"
             : "min-h-[280px] flex-1 md:min-h-0"
@@ -135,7 +135,7 @@ export default function ChartStack({ main, extras = [], pathOpacity }) {
       {panels.map((panel) => (
         <div
           key={panel.key}
-          className="flex h-[min(32rem,70vh)] min-h-[280px] shrink-0 flex-col border border-slate-300 bg-white"
+          className="simulator-extra-chart flex h-[min(32rem,70vh)] min-h-[280px] shrink-0 flex-col border border-slate-300 bg-white"
         >
           <div className="border-b border-slate-200 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
             {panel.title}

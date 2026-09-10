@@ -18,7 +18,7 @@ export default function SimChart({
   legendItems = [],
   showTooltips = true,
   showLegend = true,
-  minHeightClass = "min-h-[280px] md:min-h-[400px]",
+  minHeightClass = "min-h-0",
 }) {
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
@@ -26,7 +26,7 @@ export default function SimChart({
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const mediaQuery = window.matchMedia("(max-width: 767px)");
+    const mediaQuery = window.matchMedia("(max-width: 1023px)");
     const applyMatch = (event) => {
       const nextMatch = event?.matches ?? mediaQuery.matches;
       setIsMobileView(nextMatch);
@@ -75,7 +75,9 @@ export default function SimChart({
       yLabel,
       yBeginAtZero,
       xTickSignificantFigures,
-      xTickAutoSkip,
+      xTickAutoSkip: isMobileView || xTickAutoSkip,
+      maxXTicksLimit: isMobileView ? 6 : 14,
+      maxYTicksLimit: isMobileView ? 7 : 12,
       legendItems,
       showLegend,
       showTooltips: showTooltips && !isMobileView,
@@ -101,7 +103,7 @@ export default function SimChart({
 
   return (
     <div className={`relative w-full h-full ${minHeightClass}`}>
-      <canvas ref={canvasRef} />
+      <canvas ref={canvasRef} role="img" aria-label={`${yLabel} plotted against ${xLabel}`} />
     </div>
   );
 }

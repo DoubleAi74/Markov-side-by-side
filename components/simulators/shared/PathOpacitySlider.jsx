@@ -32,10 +32,10 @@ export default function PathOpacitySlider({
       if (event.key === "Escape") setOpen(false);
     };
 
-    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("pointerdown", handlePointerDown);
     document.addEventListener("keydown", handleEscape);
     return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleEscape);
     };
   }, [open]);
@@ -50,7 +50,7 @@ export default function PathOpacitySlider({
         aria-controls={menuId}
         title="Path opacity"
         onClick={() => setOpen((current) => !current)}
-        className={`flex h-[26px] w-6 items-center justify-center rounded border transition ${
+        className={`path-opacity-toggle flex h-[26px] w-6 items-center justify-center rounded border transition ${
           open
             ? "border-slate-400 bg-slate-100 text-slate-800"
             : "border-slate-300 bg-white text-slate-500 hover:bg-slate-100 hover:text-slate-700"
@@ -65,7 +65,7 @@ export default function PathOpacitySlider({
       {open && (
         <div
           id={menuId}
-          className="absolute left-0 top-full z-40 mt-1 w-44 rounded-lg border border-slate-200 bg-white px-2.5 py-2 shadow-xl"
+          className="path-opacity-menu absolute left-0 top-full z-40 mt-1 w-44 rounded-lg border border-slate-200 bg-white px-2.5 py-2 shadow-xl"
         >
           <label className="flex items-center gap-2 text-[11px] text-slate-500">
             <span className="select-none">opacity</span>

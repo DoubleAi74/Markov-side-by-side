@@ -37,6 +37,13 @@ export const metadata = {
   },
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  interactiveWidget: "resizes-content",
+};
+
 export default async function RootLayout({ children }) {
   const session = await auth();
   const sessionUser = await buildSessionUser(session, { ensureUsername: true });

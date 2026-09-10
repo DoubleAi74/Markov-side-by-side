@@ -3,16 +3,15 @@
 export default function EditorScrollArea({ children }) {
   return (
     <div
-      className="no-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-none"
+      className="simulator-editor-scroll no-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain"
       style={{
-        scrollPaddingBottom: "50vh",
+        scrollPaddingBlock: "1.5rem",
         overflowAnchor: "none",
-        overscrollBehavior: "none",
         scrollbarWidth: "none",
         msOverflowStyle: "none",
       }}
     >
-      <div style={{ paddingBottom: "80vh" }}>{children}</div>
+      <div className="simulator-editor-content">{children}</div>
     </div>
   );
 }

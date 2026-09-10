@@ -1,0 +1,646 @@
+/* Simulator workspace: two panes on desktop, one focused view on a phone. */
+.simulator-workspace {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - 3.5rem);
+  min-height: 0;
+  background: #e2e8f0;
+}
+
+.simulator-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.simulator-editor {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: min(var(--editor-width), 40vw);
+  min-height: 0;
+  overflow: hidden;
+  border-right: 1px solid #cbd5e1;
+  background: #f1f5f9;
+}
+
+.simulator-editor-content {
+  padding-bottom: 1.5rem;
+}
+
+.simulator-results {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  gap: 0.5rem;
+  padding: 0.75rem;
+}
+
+.simulator-toolbar,
+.simulator-desktop-controls,
+.simulator-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.simulator-toolbar {
+  flex-shrink: 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #cbd5e1;
+  background: white;
+}
+
+.simulator-tools {
+  margin-left: auto;
+}
+
+.simulator-run-button,
+.simulator-reset-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.simulator-run-button {
+  color: white;
+  background: #2563eb;
+}
+.simulator-run-button:hover {
+  background: #1d4ed8;
+}
+.simulator-reset-button {
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  background: white;
+}
+.simulator-reset-button:hover {
+  background: #f1f5f9;
+}
+.simulator-run-button:disabled,
+.simulator-reset-button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.simulation-settings {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.simulation-setting {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 11px;
+  color: #64748b;
+}
+.simulation-setting input {
+  width: 4.5rem;
+  min-width: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.375rem;
+  padding: 0.3rem 0.5rem;
+  background: white;
+  font-size: 0.75rem;
+  color: #0f172a;
+}
+
+.simulator-notices {
+  max-height: 20vh;
+  flex-shrink: 0;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  border-top: 1px solid #fecaca;
+  background: #fff7ed;
+  padding: 0.65rem 1rem;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+}
+
+.simulator-mobile-heading,
+.simulator-mobile-dock,
+.simulator-delta-name,
+.simulator-touch-label {
+  display: none;
+}
+
+.simulator-settings-dialog {
+  position: fixed;
+  inset: auto 0 0;
+  margin: 0 auto;
+  width: min(100%, 32rem);
+  max-width: 100%;
+  max-height: 85dvh;
+  overflow: auto;
+  border: 1px solid #e2e8f0;
+  border-bottom: 0;
+  border-radius: 1.5rem 1.5rem 0 0;
+  padding: 0;
+  background: white;
+  box-shadow: 0 -12px 60px #0f172a26;
+}
+
+.simulator-settings-dialog::backdrop {
+  background: #0f172a66;
+  backdrop-filter: blur(4px);
+}
+.simulator-settings-sheet {
+  padding: 0.65rem 1.25rem max(1.25rem, env(safe-area-inset-bottom));
+}
+.simulator-sheet-handle {
+  width: 2.5rem;
+  height: 4px;
+  border-radius: 2rem;
+  background: #cbd5e1;
+  margin: 0 auto 1rem;
+}
+.simulator-icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #f1f5f9;
+}
+.simulator-sheet-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+.simulator-sheet-actions > button {
+  flex: 1;
+  min-height: 48px;
+  font-size: 14px;
+}
+.simulator-settings-sheet .simulation-settings {
+  align-items: stretch;
+  gap: 1rem;
+  flex-direction: column;
+  margin-top: 1.5rem;
+}
+.simulator-settings-sheet .simulation-setting {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  font-size: 14px;
+  font-weight: 500;
+}
+.simulator-settings-sheet .simulation-setting input {
+  width: 100%;
+  min-height: 48px;
+  font-size: 16px;
+}
+
+.simulator-workspace :is(button, input, select, a) {
+  touch-action: manipulation;
+}
+.simulator-workspace :is(button, input, select, a):focus-visible {
+  outline: 2px solid #2563eb !important;
+  outline-offset: 2px;
+}
+
+@media (max-width: 1023px) {
+  .simulator-workspace {
+    height: calc(var(--simulator-viewport-height, 100dvh) - 3.5rem);
+    background: #f8fafc;
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  .simulator-mobile-heading {
+    display: block;
+    flex-shrink: 0;
+    padding: 0.75rem 1rem;
+    background: white;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .simulator-view-switch {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 0.875rem;
+    background: #f1f5f9;
+  }
+  .simulator-view-switch button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 44px;
+    border-radius: 0.65rem;
+    font-size: 14px;
+    font-weight: 600;
+    color: #475569;
+  }
+  .simulator-view-switch button[aria-pressed="true"] {
+    background: white;
+    color: #1d4ed8;
+    box-shadow: 0 1px 4px #0f172a14;
+  }
+  .simulator-results-dot {
+    height: 6px;
+    width: 6px;
+    border-radius: 50%;
+    background: #10b981;
+  }
+
+  .simulator-body {
+    overflow: hidden;
+  }
+  .simulator-editor {
+    width: 100%;
+    border: 0;
+    background: #f8fafc;
+  }
+  .simulator-workspace[data-mobile-view="results"] .simulator-editor,
+  .simulator-workspace[data-mobile-view="model"] .simulator-results {
+    display: none;
+  }
+  .simulator-editor-scroll {
+    scroll-behavior: auto;
+  }
+  .simulator-editor-content {
+    padding: 0.75rem 0.75rem 1.5rem;
+  }
+  .simulator-editor-content > section {
+    border: 0;
+  }
+  .simulator-editor-content > section > div:first-child {
+    border: 0;
+    border-radius: 0.75rem;
+    background: #f1f5f9;
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+  .simulator-editor-content p {
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .simulator-editor-content
+    input:not([type="range"]):not([type="color"]):not([type="checkbox"]),
+  .simulator-editor-content select {
+    min-height: 44px;
+    min-width: 0;
+    font-size: 16px;
+    border-radius: 0.5rem;
+  }
+  .simulator-editor-content input::placeholder {
+    font-size: 14px;
+  }
+  .simulator-editor-content button {
+    min-height: 44px;
+  }
+  .simulator-editor-content .simulator-add-row {
+    margin-top: 0.5rem;
+    border: 1px dashed #cbd5e1;
+    border-radius: 0.75rem;
+    background: white;
+    color: #2563eb;
+    font-weight: 500;
+    text-align: center;
+  }
+
+  .simulator-editor-tabs {
+    flex-shrink: 0;
+    gap: 0.25rem;
+    padding: 0.25rem 0.75rem;
+    border-color: #e2e8f0;
+    background: white;
+  }
+  .simulator-editor-tabs button {
+    min-height: 48px;
+    border: 0;
+    border-radius: 0;
+    font-size: 13px;
+    background: white;
+    color: #64748b;
+  }
+  .simulator-editor-tabs button[aria-pressed="true"] {
+    color: #1d4ed8;
+    box-shadow: inset 0 -3px #2563eb;
+  }
+
+  .expression-row,
+  .simulator-model-row {
+    margin-bottom: 0.75rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.875rem;
+    background: white;
+    overflow: hidden;
+  }
+  .expression-row {
+    grid-template-columns: minmax(0, 1fr) 44px;
+  }
+  .expression-row-tools {
+    display: flex;
+    align-items: center;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    gap: 0.25rem;
+    border: 0;
+    border-top: 1px solid #f1f5f9;
+    padding: 0 0.25rem;
+  }
+  .expression-row-tools > button {
+    position: static;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: auto;
+    min-width: 44px;
+    gap: 0.4rem;
+    padding-inline: 0.5rem;
+    color: #64748b;
+  }
+  .expression-row-tools > .variable-color-input {
+    position: relative;
+    inset: auto;
+    transform: none;
+    width: 44px;
+    height: 44px;
+    border: 12px solid white;
+    border-radius: 1rem;
+    translate: none;
+  }
+  .expression-row-input {
+    grid-column: 1;
+    grid-row: 1;
+    padding: 0.5rem;
+    background: white;
+  }
+  .expression-row-note {
+    position: static;
+    min-width: 0;
+  }
+  .expression-row-note input {
+    width: 100%;
+  }
+  .expression-row-delete {
+    grid-column: 2;
+    grid-row: 1;
+    border: 0;
+    align-self: start;
+  }
+
+  .simulator-model-row {
+    grid-template-columns: minmax(0, 1fr) 44px;
+  }
+  .simulator-model-row > div:first-child {
+    border: 0;
+    padding-top: 0;
+    grid-column: 1;
+    grid-row: 1;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.25rem;
+    padding: 0 0.25rem;
+  }
+  .simulator-model-row > div:first-child > button {
+    width: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .simulator-model-row > button:last-child {
+    border: 0;
+    align-self: start;
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .simulator-model-row > div:nth-child(2) {
+    min-width: 0;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    padding: 0.25rem 0.75rem 0.75rem;
+  }
+  .simulator-model-row .variable-color-input {
+    width: 44px;
+    height: 44px;
+    left: 0;
+    border: 12px solid white;
+    border-radius: 1rem;
+    position: relative;
+    inset: auto;
+    translate: none;
+  }
+  .simulator-transition-changes {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+  }
+  .simulator-deltas {
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+  .simulator-delta-name {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 10px;
+    font-weight: 600;
+    color: #64748b;
+    margin-bottom: 0.25rem;
+  }
+
+  .simulator-results {
+    gap: 0.75rem;
+    padding: 0.75rem;
+  }
+  .simulator-toolbar {
+    border: 0;
+    background: transparent;
+    padding: 0;
+  }
+  .simulator-desktop-controls {
+    display: none;
+  }
+  .simulator-tools {
+    width: 100%;
+    margin: 0;
+    flex-wrap: nowrap;
+    justify-content: space-between;
+  }
+  .simulator-tools button,
+  .simulator-tools a {
+    min-height: 44px;
+    font-size: 13px;
+    border-radius: 0.65rem;
+  }
+  .simulator-tools [role="menu"] {
+    max-height: 50dvh;
+    overflow-y: auto;
+  }
+  .simulator-tools #graphs-menu {
+    left: 0;
+    right: auto;
+    width: min(18rem, calc(100vw - 2rem));
+  }
+  .simulator-main-chart,
+  .simulator-extra-chart {
+    min-height: 240px;
+    border-color: #e2e8f0;
+    border-radius: 0.875rem;
+    padding: 0.5rem 0.25rem;
+    overflow: hidden;
+    box-shadow: 0 2px 6px #0f172a04;
+  }
+  .simulator-chart-stack {
+    gap: 0.75rem;
+    overscroll-behavior: contain;
+  }
+  .simulator-main-chart.h-full {
+    min-height: max(240px, 100%);
+  }
+
+  .simulator-mobile-dock {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 0.75rem;
+    border-top: 1px solid #e2e8f0;
+    padding: 0.75rem 1rem max(0.75rem, env(safe-area-inset-bottom));
+    background: white;
+    box-shadow: 0 -4px 20px #0f172a05;
+  }
+  .simulator-settings-button {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-width: 0;
+    min-height: 48px;
+    color: #475569;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: left;
+  }
+  .simulator-run-summary {
+    display: block;
+    max-width: 8rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+    font-weight: 400;
+    color: #64748b;
+    margin-top: 2px;
+  }
+  .simulator-mobile-dock .simulator-run-button {
+    flex: 1;
+    min-height: 48px;
+    padding: 0.75rem;
+    border-radius: 0.875rem;
+    font-size: 14px;
+    box-shadow: 0 3px 8px #2563eb26;
+  }
+
+  .numeric-slider {
+    padding: 0.25rem;
+    border-radius: 0.5rem;
+  }
+  .numeric-slider input[type="range"] {
+    height: 44px;
+  }
+  .numeric-slider-limit {
+    width: 44px;
+    min-width: 44px;
+    font-size: 12px;
+  }
+  .numeric-slider-settings {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) 44px;
+  }
+  .numeric-slider-settings input {
+    padding: 0.25rem;
+  }
+  .numeric-slider-settings label > span {
+    font-size: 11px;
+    line-height: 1.5;
+  }
+  .path-opacity-toggle {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .path-opacity-menu {
+    left: auto;
+    right: 0;
+    width: 15rem;
+  }
+  .path-opacity-menu label {
+    font-size: 13px;
+  }
+  .path-opacity-slider {
+    height: 44px;
+    background: transparent;
+  }
+  .path-opacity-slider::-webkit-slider-thumb {
+    width: 24px;
+    height: 24px;
+    margin-top: -11px;
+    background: #2563eb;
+  }
+  .path-opacity-slider::-moz-range-thumb {
+    width: 24px;
+    height: 24px;
+    background: #2563eb;
+  }
+  .discrete-outcome-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px;
+    gap: 0.5rem;
+  }
+  .discrete-model-row input[type="range"] {
+    min-height: 44px;
+  }
+  .discrete-model-row label:has(input[type="checkbox"]) {
+    min-height: 44px;
+  }
+  .discrete-model-row input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+  }
+  .discrete-model-row th button {
+    min-width: 44px;
+  }
+  .simulator-tools [id$="-save-popover"] {
+    max-height: 55dvh;
+  }
+  .expression-row-tools > button[aria-pressed="true"] {
+    color: #2563eb;
+  }
+  .simulator-touch-label {
+    display: inline;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 374px) {
+  .simulator-mobile-heading {
+    padding: 0.5rem 0.75rem;
+  }
+  .simulator-mobile-dock {
+    gap: 0.5rem;
+    padding-inline: 0.75rem;
+  }
+  .simulator-settings-button {
+    gap: 0.4rem;
+  }
+  .simulator-mobile-dock .simulator-run-button {
+    font-size: 13px;
+  }
+  .simulator-run-summary {
+    max-width: 6rem;
+  }
+}

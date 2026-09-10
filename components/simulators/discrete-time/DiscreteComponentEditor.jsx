@@ -232,7 +232,7 @@ export default function DiscreteComponentEditor({
   };
 
   return (
-    <div className="grid grid-cols-[34px_minmax(0,1fr)_28px] border-b border-slate-300 bg-slate-100 sm:grid-cols-[46px_minmax(0,1fr)_36px]">
+    <div className="simulator-model-row discrete-model-row grid grid-cols-[34px_minmax(0,1fr)_28px] border-b border-slate-300 bg-slate-100 sm:grid-cols-[46px_minmax(0,1fr)_36px]">
       <div className="relative flex justify-center border-r border-slate-300 pt-2">
         <VariableColorInput
           className="w-3"
@@ -512,7 +512,7 @@ export default function DiscreteComponentEditor({
             </>
           ) : (
             <>
-              <div className="grid grid-cols-[minmax(0,1fr)_90px_24px] gap-2 px-2.5 pb-1 pt-2 text-[10px] font-semibold uppercase text-slate-500">
+              <div className="discrete-outcome-row grid grid-cols-[minmax(0,1fr)_90px_24px] gap-2 px-2.5 pb-1 pt-2 text-[10px] font-semibold uppercase text-slate-500">
                 <span>{mode === "branching" ? "Offspring" : "Change (Δ)"}</span>
                 <span>Probability</span>
                 <span />
@@ -520,7 +520,7 @@ export default function DiscreteComponentEditor({
               {outcomes.map((outcome, outcomeIndex) => (
                 <div
                   key={outcome.id}
-                  className="grid grid-cols-[minmax(0,1fr)_90px_24px] items-center gap-2 border-t border-slate-100 px-2.5 py-1.5"
+                  className="discrete-outcome-row grid grid-cols-[minmax(0,1fr)_90px_24px] items-center gap-2 border-t border-slate-100 px-2.5 py-1.5"
                 >
                   <input
                     type="number"

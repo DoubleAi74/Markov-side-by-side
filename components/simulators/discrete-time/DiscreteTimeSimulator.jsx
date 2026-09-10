@@ -8,7 +8,8 @@ import {
   hydrateDiscreteTimePayload,
   serializeDiscreteTimeState,
 } from "@/lib/saved-simulations/serializers";
-import PathOpacitySlider from "../shared/PathOpacitySlider";
+import SimulationSettings from "../shared/SimulationSettings";
+import SimulatorWorkspace from "../shared/SimulatorWorkspace";
 import SaveModelControls from "../shared/SaveModelControls";
 import EditorScrollArea from "../shared/EditorScrollArea";
 import ChartStack, { buildExtraGraphPanels } from "../shared/ChartStack";
@@ -364,10 +365,34 @@ export default function DiscreteTimeSimulator({
     }, 50);
   }, [components, generations, modelName, numSims, pathOpacity, variableSeries]);
 
+  const settings = (
+    <SimulationSettings
+      duration={generations}
+      onDurationChange={setGenerations}
+      discrete
+      runs={numSims}
+      onRunsChange={setNumSims}
+      pathOpacity={pathOpacity}
+      onPathOpacityChange={setPathOpacity}
+    />
+  );
+
   return (
-    <div className="flex h-auto flex-col bg-slate-300 md:h-[calc(100vh-3.5rem)]">
-      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <aside className="flex max-h-[calc(100dvh-3.5rem)] min-h-0 w-full flex-col overflow-hidden border-r border-slate-300 bg-slate-100 md:max-h-none md:w-[520px] md:shrink-0">
+    <SimulatorWorkspace
+      running={running}
+      onRun={runSimulation}
+      onReset={resetModel}
+      settings={settings}
+      summary={`${numSims} ${Number(numSims) === 1 ? "run" : "runs"} · ${generations} steps`}
+      error={error}
+      hasResults={Boolean(runSnapshot?.runs?.length)}
+    >
+      <div className="simulator-body">
+        <aside
+          className="simulator-editor"
+          aria-label="Model editor"
+          style={{ "--editor-width": "520px" }}
+        >
           <EditorScrollArea>
             <section className="border-b border-slate-400">
               <div className="border-b border-slate-400 bg-slate-200 px-3 py-2.5">
@@ -393,79 +418,40 @@ export default function DiscreteTimeSimulator({
               <button
                 type="button"
                 onClick={addComponent}
-                className="w-full px-4 py-2 text-left text-sm text-slate-500 transition hover:bg-slate-200 hover:text-slate-700"
+                className="simulator-add-row w-full px-4 py-2 text-left text-sm text-slate-500 transition hover:bg-slate-200 hover:text-slate-700"
               >
                 + Add variable
               </button>
             </section>
           </EditorScrollArea>
-
-          {error && (
-            <div className="border-t border-slate-300 p-3">
-              <div className="whitespace-pre-wrap rounded border border-red-200 bg-red-100 px-2 py-1.5 text-xs text-red-700">
-                {error}
-              </div>
-            </div>
-          )}
         </aside>
 
-        <div className="flex min-h-[360px] min-w-0 flex-1 flex-col gap-2 bg-slate-200 pt-2 pl-2 pr-4 pb-2 md:min-h-0 md:pt-3 md:pl-3 md:pr-5 md:pb-2.5">
-          <div className="border border-slate-300 bg-white">
-            <div className="flex flex-nowrap items-center gap-2 px-3 py-2">
-              <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-2">
-                <div className="flex shrink-0 items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={runSimulation}
-                    disabled={running}
-                    className="w-24 rounded bg-blue-600 py-1.5 text-center text-xs font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
-                  >
-                    {running ? "Running..." : "Run"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={resetModel}
-                    className="w-20 rounded border border-slate-300 py-1.5 text-xs text-slate-700 hover:bg-slate-100"
-                  >
-                    Reset
-                  </button>
-                </div>
-
-                <div className="flex min-w-0 items-center gap-2 whitespace-nowrap">
-                  <label className="flex shrink-0 items-center gap-2 text-[11px] text-slate-500">
-                    steps
-                  <input
-                    type="number"
-                    min="1"
-                    max="10000"
-                    step="1"
-                    aria-label="Steps"
-                    value={generations}
-                    onChange={(event) => setGenerations(event.target.value)}
-                    className="w-20 rounded border border-slate-300 bg-white px-2 py-1 text-xs outline-none ring-0 transition-colors focus:border-slate-400 focus:outline-none focus:ring-0"
-                  />
-                  </label>
-                  <span className="flex shrink-0 items-center gap-2 text-[11px] text-slate-500">
-                    runs
-                    <span className="flex items-center gap-0.5">
-                  <input
-                    type="number"
-                    min="1"
-                    max="200"
-                    step="1"
-                    aria-label="Runs"
-                    value={numSims}
-                    onChange={(event) => setNumSims(event.target.value)}
-                    className="w-16 rounded border border-slate-300 bg-white px-2 py-1 text-xs outline-none ring-0 transition-colors focus:border-slate-400 focus:outline-none focus:ring-0"
-                  />
-                    {Number(numSims) > 1 && (
-                      <PathOpacitySlider value={pathOpacity} onChange={setPathOpacity} />
-                    )}
-                    </span>
-                  </span>
-                </div>
-              </div>
-
+        <div
+          className="simulator-results"
+          role="region"
+          aria-label="Simulation results"
+        >
+          <div className="simulator-toolbar">
+            <div className="simulator-desktop-controls">
+              <button
+                type="button"
+                onClick={runSimulation}
+                disabled={running}
+                className="simulator-run-button"
+              >
+                {running ? "Running…" : "Run"}
+              </button>
+              <button
+                type="button"
+                onClick={resetModel}
+                disabled={running}
+                className="simulator-reset-button"
+              >
+                Reset
+              </button>
+              {settings}
+            </div>
+            <div className="simulator-tools">
               <GraphsMenu
                 pairs={extraGraphs.pairs}
                 enabledPairKeys={extraGraphs.enabledPairKeys}
@@ -513,6 +499,6 @@ export default function DiscreteTimeSimulator({
           />
         </div>
       </div>
-    </div>
+    </SimulatorWorkspace>
   );
 }
