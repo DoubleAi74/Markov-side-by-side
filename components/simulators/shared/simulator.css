@@ -369,12 +369,10 @@
   .expression-row-tools > .variable-color-input {
     position: relative;
     inset: auto;
-    transform: none;
     width: 44px;
     height: 44px;
     border: 12px solid white;
     border-radius: 1rem;
-    translate: none;
   }
   .expression-row-input {
     grid-column: 1;
@@ -435,7 +433,6 @@
     border-radius: 1rem;
     position: relative;
     inset: auto;
-    translate: none;
   }
   .simulator-transition-changes {
     flex-direction: column;
